@@ -11,9 +11,12 @@ import {
 } from "lucide-react"
 import { motion } from "framer-motion"
 import SmallLoading from "../../Reusables/SmallLoading"
+import SalesModal from "./SalesModal"
 import DispatchContext from "../../../DispatchContext"
+import StateContext from "../../../StateContext"
 
 export default function SalesTable() {
+  const appState = useContext(StateContext)
   // Mock data representing what will come from your MongoDB 'Sales' collection
   const appDispatch = useContext(DispatchContext)
   const [salesHistory] = useState([
@@ -187,6 +190,8 @@ export default function SalesTable() {
           </div>
         </div>
       </div>
+      {/* modals */}
+      {appState.isSalesModalOpen && <SalesModal />}
     </div>
   )
 }

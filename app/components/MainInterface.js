@@ -1,4 +1,4 @@
-import React, { useContext, useEffect } from "react"
+import React, { useContext } from "react"
 import {
   LayoutDashboard,
   Package,
@@ -6,106 +6,117 @@ import {
   Users,
   LogOut,
   TableProperties,
+  User,
 } from "lucide-react"
 import Dashboard from "./Pages/Dashboard/Dashboard"
 import SalesTable from "./Pages/Sales/SalesTable"
 import { useParams, Link } from "react-router-dom"
-import ProductTable from "./Pages/Inventory/ProductTable"
-import AddProductModal from "./Pages/Inventory/AddProductModal"
-import SalesModal from "./Pages/Sales/SalesModal"
+import Inventory from "./Pages/Inventory/Inventory"
 import StateContext from "../StateContext"
+import CustomerPage from "./Pages/Customers/Customer"
+import StaffPage from "./Pages/Staff/Staff"
 
-export default function MainLayout({ children }) {
+export default function MainLayout() {
   const { page } = useParams()
   const appState = useContext(StateContext)
 
-  useEffect(() => {
-    console.log("Current page:", page)
-  }, [])
   return (
     <>
-      {appState.isSalesModalOpen && <SalesModal />}
-      {appState.isProductModalOpen && <AddProductModal />}
-      <div className="flex h-screen bg-gray-100">
-        {/* Sidebar */}
-        <aside className="w-64 bg-white shadow-md flex flex-col">
-          <div className="p-6 flex flex-col items-center border-b">
-            <img src="logo.jpg" alt="Logo" className="w-10 h-10 mb-2" />
-            <h2 className="font-bold text-gray-800">My Store POS</h2>
+      <div className="flex h-screen bg-white text-gray-900 font-sans">
+        {/* --- SIDEBAR --- */}
+        <aside className="w-64 bg-white border-r border-gray-200/50 flex flex-col z-20">
+          <div className="p-6 flex items-center gap-3">
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-sm">
+              <Package size={18} />
+            </div>
+            <h2 className="font-semibold text-gray-800 tracking-tight">
+              My Store POS
+            </h2>
           </div>
 
-          <nav className="flex-1 p-4 space-y-2">
+          <nav className="flex-1 p-4 space-y-1">
             <NavItem
               to="/dashboard"
-              icon={<LayoutDashboard size={20} />}
+              icon={<LayoutDashboard size={18} />}
               label="Dashboard"
               active={page === "dashboard"}
             />
             <NavItem
               to="/sales"
-              icon={<ShoppingCart size={20} />}
+              icon={<ShoppingCart size={18} />}
               label="Sales"
               active={page === "sales"}
             />
             <NavItem
-              to="/products"
-              icon={<Package size={20} />}
-              label="Products"
-              active={page === "products"}
-            />
-            <NavItem
               to="/inventory"
-              icon={<TableProperties size={20} />}
+              icon={<TableProperties size={18} />}
               label="Inventory"
               active={page === "inventory"}
             />
             <NavItem
               to="/customers"
-              icon={<Users size={20} />}
+              icon={<Users size={18} />}
               label="Customers"
               active={page === "customers"}
             />
+            <NavItem
+              to="/staff"
+              icon={<Users size={18} />}
+              label="Staff"
+              active={page === "staff"}
+            />
           </nav>
 
-          <div className="p-4 border-t">
-            <button className="flex items-center gap-3 w-full px-4 py-2 text-red-500 hover:bg-red-50 rounded-lg transition">
-              <LogOut size={20} />
-              <span className="font-medium">Logout</span>
+          <div className="p-4 border-t border-gray-100/50">
+            <button className="flex items-center gap-3 w-full px-4 py-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
+              <LogOut size={18} />
+              <span className="text-sm font-medium">Logout</span>
             </button>
           </div>
         </aside>
 
-        {/* Main Content */}
+        {/* --- MAIN CONTENT AREA --- */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Top Header with Stats */}
-          <header className="bg-white p-6 shadow-sm flex gap-6 overflow-x-auto">
-            <HeaderStat
-              label="Daily Sales"
-              value="$1,200"
-              color="text-blue-600"
-            />
-            <HeaderStat
-              label="Items on Shelf"
-              value="150"
-              color="text-green-600"
-            />
-            <HeaderStat
-              label="Items in Store"
-              value="1,400"
-              color="text-orange-600"
-            />
+          {/* --- MINIMALIST NATURAL HEADER --- */}
+          <header className="h-20 px-8 bg-white flex items-center justify-between flex-shrink-0">
+            {/* Left: Page Context */}
+            <div className="flex items-center gap-3">
+              <div className="h-6 w-1 bg-indigo-600 rounded-full"></div>
+              <h2 className="text-lg font-semibold text-gray-800 tracking-tight capitalize">
+                {page || "Dashboard"}
+              </h2>
+            </div>
+
+            {/* Right: Identity Info (Name & Email) */}
+            <div className="flex items-center gap-2 px-4 py-2 rounded-2xl">
+              <div className="text-right">
+                <p className="text-xs text-gray-800 leading-none">
+                  {appState.user?.username || "Admin"}
+                </p>
+              </div>
+
+              <div className="w-7 h-7 bg-indigo-10 text-gray-800 rounded-full flex items-center justify-center border border-gray-800">
+                <User size={15} />
+              </div>
+            </div>
           </header>
 
-          {/* Render the approriate page based on the URL param */}
-          <main className="p-8 overflow-y-auto">
-            {page == "dashboard" ? (
+          {/* --- PAGE CONTENT --- */}
+          <main className="flex-1 px-8 pb-8 overflow-y-auto">
+            {page === "dashboard" ? (
               <Dashboard />
-            ) : page == "sales" ? (
+            ) : page === "sales" ? (
               <SalesTable />
-            ) : page == "products" ? (
-              <ProductTable />
+            ) : page === "inventory" ? (
+              <Inventory />
+            ) : page === "customers" ? (
+              <CustomerPage />
+            ) : page === "staff" ? (
+              <StaffPage />
             ) : (
-              "Page Not Found"
+              <div className="h-full flex items-center justify-center text-gray-300 font-medium italic font-sans">
+                Select a module to begin
+              </div>
             )}
           </main>
         </div>
@@ -118,22 +129,15 @@ function NavItem({ icon, label, active, to }) {
   return (
     <Link to={to}>
       <div
-        className={`flex items-center gap-3 px-4 py-2 rounded-lg cursor-pointer transition ${
-          active ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
+        className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 ${
+          active
+            ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
+            : "text-gray-500 hover:bg-gray-50 hover:text-indigo-600"
         }`}
       >
         {icon}
-        <span className="font-medium">{label}</span>
+        <span className="text-sm font-medium">{label}</span>
       </div>
     </Link>
-  )
-}
-
-function HeaderStat({ label, value, color }) {
-  return (
-    <div className="bg-gray-50 px-4 py-3 rounded-lg min-w-[150px]">
-      <p className="text-sm text-gray-500">{label}</p>
-      <h3 className={`text-xl font-bold ${color}`}>{value}</h3>
-    </div>
   )
 }

@@ -14,23 +14,45 @@ export default function App() {
   const initialState = {
     isSalesModalOpen: false,
     isProductModalOpen: false,
+    isArrivalModalOpen: false,
+    isTransferModalOpen: false,
+    isReceiptOpen: false,
+    backendURL: "http://192.168.127.246:8000",
   }
 
-  function reducer(state, action) {
+  function reducer(draft, action) {
     switch (action.type) {
       // sales modal
       case "openSalesModal":
-        state.isSalesModalOpen = true
+        draft.isSalesModalOpen = true
         break
       case "closeSalesModal":
-        state.isSalesModalOpen = false
+        draft.isSalesModalOpen = false
         break
       // product modal
       case "openProductModal":
-        state.isProductModalOpen = true
+        draft.isProductModalOpen = true
         break
       case "closeProductModal":
-        state.isProductModalOpen = false
+        draft.isProductModalOpen = false
+        break
+      case "openArrivalModal":
+        draft.isArrivalModalOpen = true
+        break
+      case "closeArrivalModal":
+        draft.isArrivalModalOpen = false
+        break
+      case "openTransferModal":
+        draft.isTransferModalOpen = true
+        break
+      case "closeTransferModal":
+        draft.isTransferModalOpen = false
+        break
+      case "openReceipt":
+        draft.isReceiptOpen = true
+        break
+      case "closeReceipt":
+        draft.isReceiptOpen = false
         break
     }
   }

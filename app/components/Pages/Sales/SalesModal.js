@@ -241,7 +241,10 @@ export default function CompactSalesModal() {
             >
               Cancel
             </button>
-            <button className="bg-blue-600 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-100 hover:bg-blue-700 transition active:scale-95">
+            <button
+              onClick={() => appDispatch({ type: "openReceipt" })}
+              className="bg-blue-600 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-100 hover:bg-blue-700 transition active:scale-95"
+            >
               CHECKOUT (F8)
             </button>
           </div>

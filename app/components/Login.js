@@ -16,7 +16,7 @@ function LoginPage() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-6">
           <img
-            src="app/components/logo.jpg"
+            src="https://thumbs.dreamstime.com/b/realistic-corporate-different-type-business-logo-design-template-featuring-versatile-professional-logos-suitable-various-357594532.jpg?w=768"
             alt="Store Logo"
             className="w-16 h-16 mb-2"
           />

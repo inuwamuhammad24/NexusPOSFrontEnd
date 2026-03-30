@@ -12,6 +12,7 @@ import SalesModal from "../Sales/SalesModal"
 import AddProductModal from "../Inventory/AddProductModal"
 import DispatchContext from "../../../DispatchContext"
 import StateContext from "../../../StateContext"
+import ThermalReceipt from "../Sales/ThermalReceipt"
 
 export default function Dashboard() {
   const appState = useContext(StateContext)
@@ -19,6 +20,9 @@ export default function Dashboard() {
 
   return (
     <>
+      {/* Modals */}
+      {appState.isSalesModalOpen && <SalesModal />}
+      {appState.isReceiptOpen && <ThermalReceipt />}
       <div className="space-y-8">
         {/* 1. Page Header */}
         <div className="flex justify-between items-end">
@@ -32,9 +36,10 @@ export default function Dashboard() {
           </div>
           <button
             onClick={() => appDispatch({ type: "openSalesModal" })}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 hover:cursor-pointer transition shadow-md flex items-center gap-2"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-600 bg-blue-600 text-white rounded-xl hover:bg-blue-700 hover:cursor-pointer transition"
           >
-            <ShoppingCart size={18} /> New Sale
+            <ShoppingCart size={16} />
+            New Sale
           </button>
         </div>
 
