@@ -1,11 +1,39 @@
-import React, { useState } from "react"
-import { Users, UserPlus, ShieldCheck, ShieldAlert, Search } from "lucide-react"
+import React, { useContext, useEffect, useState } from "react"
+import {
+  Users,
+  UserPlus,
+  ShieldCheck,
+  ShieldAlert,
+  Search,
+  Loader2,
+  LoaderCircle,
+  Loader,
+} from "lucide-react"
 import StaffTable from "./StaffTable"
 import AddStaffModal from "./AddStaffModal"
+import Axios from "axios"
+import StateContext from "../../../StateContext"
+import SmallLoading from "../../Reusables/SmallLoading"
 
 export default function StaffPage() {
+  const appState = useContext(StateContext)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [staffCount, setStaffCount] = useState(null)
+
+  useEffect(() => {
+    async function fetchPulse() {
+      try {
+        const response = await Axios.get(
+          `${appState.backendURL}/get-staff-pulses`,
+        )
+        setStaffCount(response.data[0])
+      } catch (error) {
+        console.log(error)
+      }
+    }
+    fetchPulse()
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -37,9 +65,16 @@ export default function StaffPage() {
           </div>
           <div>
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-              Total Team
+              {staffCount ? "Total Team" : "Getting teams..."}
             </p>
-            <p className="text-xl font-black text-gray-800">12 Members</p>
+            <p className="text-xl font-black text-gray-800">
+              {staffCount ? (
+                staffCount.staffCount
+              ) : (
+                // show a loader
+                <Loader2 className="animate-spin" />
+              )}
+            </p>
           </div>
         </div>
         <div className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm flex items-center gap-4">

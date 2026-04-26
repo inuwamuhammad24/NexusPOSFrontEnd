@@ -13,8 +13,10 @@ import {
 } from "lucide-react"
 import Axios from "axios"
 import StateContext from "../../../StateContext"
+import DispatchContext from "../../../DispatchContext"
 
-export default function AddCustomerModal({ isOpen, onClose, onSave }) {
+export default function AddCustomerModal({ isOpen, onClose }) {
+  const appDispatch = useContext(DispatchContext)
   const appState = useContext(StateContext)
   const [formData, setFormData] = useState({
     name: "",
@@ -46,14 +48,18 @@ export default function AddCustomerModal({ isOpen, onClose, onSave }) {
     )
     if (response.data) {
       // pass the new customer data back to parent so it can be added to the list without refetching
-      console.log("New Customer Created:", response.data)
+      // appDispatch({ type: "addNewCustomer", payload: response.data })
+      appDispatch({
+        type: "addFlashMessage",
+        payload: { type: "success", msg: "Customer registered successfully!" },
+      })
     }
     onClose()
   }
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="fixed inset-0 z-110 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -71,7 +77,7 @@ export default function AddCustomerModal({ isOpen, onClose, onSave }) {
           {/* Header */}
           <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-600 text-white rounded-lg shadow-sm">
+              <div className="p-2 bg-blue-600 text-white rounded-lg shadow-sm">
                 <UserPlus size={20} />
               </div>
               <div>
@@ -106,7 +112,7 @@ export default function AddCustomerModal({ isOpen, onClose, onSave }) {
                   required
                   type="text"
                   placeholder="e.g. Alex Rivera"
-                  className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
+                  className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
                   onChange={e =>
                     setFormData({ ...formData, name: e.target.value })
                   }
@@ -129,7 +135,7 @@ export default function AddCustomerModal({ isOpen, onClose, onSave }) {
                     required
                     type="tel"
                     placeholder="0810..."
-                    className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
+                    className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
                     onChange={e =>
                       setFormData({ ...formData, phone: e.target.value })
                     }
@@ -148,7 +154,7 @@ export default function AddCustomerModal({ isOpen, onClose, onSave }) {
                   <input
                     type="number"
                     placeholder="0.00"
-                    className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-indigo-600 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
+                    className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-blue-600 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
                     onChange={e =>
                       setFormData({
                         ...formData,
@@ -173,7 +179,7 @@ export default function AddCustomerModal({ isOpen, onClose, onSave }) {
                 <input
                   type="email"
                   placeholder="alex@mail.com"
-                  className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
+                  className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
                   onChange={e =>
                     setFormData({ ...formData, email: e.target.value })
                   }
@@ -194,7 +200,7 @@ export default function AddCustomerModal({ isOpen, onClose, onSave }) {
                 <textarea
                   rows="2"
                   placeholder="Street, City, State"
-                  className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all resize-none"
+                  className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all resize-none"
                   onChange={e =>
                     setFormData({ ...formData, address: e.target.value })
                   }
@@ -203,9 +209,9 @@ export default function AddCustomerModal({ isOpen, onClose, onSave }) {
             </div>
 
             {/* Subtle Info Note */}
-            <div className="flex gap-3 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100/50">
-              <Info className="text-indigo-400 shrink-0" size={14} />
-              <p className="text-[10px] text-indigo-600 font-medium leading-relaxed">
+            <div className="flex gap-3 p-3 bg-blue-50/50 rounded-xl border border-blue-100/50">
+              <Info className="text-blue-400 shrink-0" size={14} />
+              <p className="text-[10px] text-blue-600 font-medium leading-relaxed">
                 Setting a <b>Credit Limit</b> allows this customer to make
                 purchases on debt up to the specified amount.
               </p>
@@ -223,7 +229,7 @@ export default function AddCustomerModal({ isOpen, onClose, onSave }) {
               <button
                 type="submit"
                 disabled={isSaving}
-                className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-semibold text-sm shadow-md hover:bg-indigo-700 transition active:scale-[0.98] flex items-center justify-center gap-2"
+                className="flex-2 py-3 bg-blue-600 text-white rounded-xl font-semibold text-sm shadow-md hover:bg-blue-700 transition active:scale-[0.98] flex items-center justify-center gap-2"
               >
                 {isSaving ? (
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
