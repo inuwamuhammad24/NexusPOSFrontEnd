@@ -12,7 +12,8 @@ import {
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 
-export default function ProductTable({ locationId, searchQuery }) {
+// ADDED: onEdit prop received from InventoryPage
+export default function ProductTable({ locationId, searchQuery, onEdit }) {
   const appState = useContext(StateContext)
   const appDispatch = useContext(DispatchContext)
 
@@ -21,7 +22,6 @@ export default function ProductTable({ locationId, searchQuery }) {
   const [hasMore, setHasMore] = useState(true)
   const [isFetching, setIsFetching] = useState(false)
 
-  // NEW: Specifically tracks the "First Load" after a node change
   const [isInitialLoading, setIsInitialLoading] = useState(true)
 
   const sentinelRef = useRef(null)
@@ -30,6 +30,7 @@ export default function ProductTable({ locationId, searchQuery }) {
     return new Intl.NumberFormat("en-NG", {
       style: "currency",
       currency: "NGN",
+      maximumFractionDigits: 0,
     }).format(amount || 0)
   }
 
@@ -37,7 +38,7 @@ export default function ProductTable({ locationId, searchQuery }) {
     if (isFetching || (!hasMore && !isNewSearch)) return
 
     setIsFetching(true)
-    if (isNewSearch) setIsInitialLoading(true) // Start the full-table loader
+    if (isNewSearch) setIsInitialLoading(true)
 
     const currentLastId = isNewSearch ? null : lastId
 
@@ -50,6 +51,7 @@ export default function ProductTable({ locationId, searchQuery }) {
       })
 
       if (response.data && response.data.length > 0) {
+        console.log(response.data)
         setProducts(prev =>
           isNewSearch ? response.data : [...prev, ...response.data],
         )
@@ -64,7 +66,7 @@ export default function ProductTable({ locationId, searchQuery }) {
       setHasMore(false)
     } finally {
       setIsFetching(false)
-      setIsInitialLoading(false) // Data arrived, hide the main loader
+      setIsInitialLoading(false)
     }
   }
 
@@ -119,7 +121,6 @@ export default function ProductTable({ locationId, searchQuery }) {
           <tbody className="divide-y divide-gray-50 relative">
             <AnimatePresence mode="wait">
               {isInitialLoading ? (
-                // --- FULL TABLE SKELETON LOADER ---
                 <motion.tr
                   key="loader"
                   initial={{ opacity: 0 }}
@@ -147,7 +148,6 @@ export default function ProductTable({ locationId, searchQuery }) {
                   </td>
                 </motion.tr>
               ) : (
-                // --- ACTUAL PRODUCT ROWS ---
                 products.map(item => (
                   <motion.tr
                     initial={{ opacity: 0 }}
@@ -166,7 +166,9 @@ export default function ProductTable({ locationId, searchQuery }) {
                           </p>
                           <p className="text-[10px] text-gray-400 mt-1.5 font-bold uppercase tracking-tighter">
                             {item.details?.sku || item.sku} •{" "}
-                            {item.details?.unitType || item.unitType}
+                            {item.details?.packaging ||
+                              item.packaging ||
+                              "Units"}
                           </p>
                         </div>
                       </div>
@@ -204,7 +206,12 @@ export default function ProductTable({ locationId, searchQuery }) {
                         >
                           <ArrowRightLeft size={16} />
                         </button>
-                        <button className="p-2 text-gray-400 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition">
+
+                        {/* UPDATED: Edit Button connected to onEdit prop */}
+                        <button
+                          onClick={() => onEdit(item.details || item)}
+                          className="p-2 text-gray-400 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition"
+                        >
                           <Edit3 size={16} />
                         </button>
                       </div>

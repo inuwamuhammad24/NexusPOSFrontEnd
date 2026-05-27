@@ -293,8 +293,7 @@ export default function CompactSalesModal() {
                       {item.name}
                     </p>
                     <p className="text-[9px] text-gray-400 uppercase">
-                      Stock: {item.bulkQuantity} | Default:{" "}
-                      {formatNaira(item.sellingPrice)}
+                      Price: {formatNaira(item.sellingPrice)}
                     </p>
                   </div>
 

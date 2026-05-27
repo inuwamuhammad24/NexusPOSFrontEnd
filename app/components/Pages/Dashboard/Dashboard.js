@@ -70,21 +70,28 @@ export default function Dashboard() {
           icon={<ShoppingCart size={20} />}
           color="indigo"
         />
-        <StatCard
-          label="Capital in Stock"
-          value={formatNaira(pulse.valuation)}
-          subValue={`${pulse.units.toLocaleString()} Total Units`}
-          icon={<Package size={20} />}
-          color="blue"
-        />
-        <StatCard
-          label="Net Profit"
-          value={formatNaira(pulse.profit)}
-          subValue={`${pulse.marginPercent.toFixed(1)}% Daily Margin`}
-          icon={<TrendingUp size={20} />}
-          color="emerald"
-          trend={pulse.profit > 0 ? "up" : "down"}
-        />
+        {localStorage.getItem("role") === "Admin" ||
+        localStorage.getItem("role") === "Manager" ? (
+          <>
+            <StatCard
+              label="Capital in Stock"
+              value={formatNaira(pulse.valuation)}
+              subValue={`${pulse.units.toLocaleString()} Total Units`}
+              icon={<Package size={20} />}
+              color="blue"
+            />
+            <StatCard
+              label="Net Profit"
+              value={formatNaira(pulse.profit)}
+              subValue={`${pulse.marginPercent.toFixed(1)}% Daily Margin`}
+              icon={<TrendingUp size={20} />}
+              color="emerald"
+              trend={pulse.profit > 0 ? "up" : "down"}
+            />
+          </>
+        ) : (
+          ""
+        )}
         <StatCard
           label="Top Velocity"
           value={pulse.topProducts[0]?.name || "None"}

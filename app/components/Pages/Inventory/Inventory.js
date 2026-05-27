@@ -20,6 +20,7 @@ import AddProductModal from "./AddProductModal"
 import AddLocationModal from "./AddLocationModal"
 import StateContext from "../../../StateContext"
 import DispatchContext from "../../../DispatchContext"
+import EditProductModal from "./EditProductModal"
 
 export default function InventoryPage() {
   const appState = useContext(StateContext)
@@ -30,6 +31,8 @@ export default function InventoryPage() {
   const [selectedStore, setSelectedStore] = useState(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoadingLocs, setIsLoadingLocs] = useState(true)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState(null)
 
   // --- FETCH NODES ---
   useEffect(() => {
@@ -73,6 +76,17 @@ export default function InventoryPage() {
     }, 0)
   }
 
+  // Function to open the modal
+  const handleEditClick = product => {
+    setSelectedProduct(product) // 1. Defines what data to use
+    setIsEditModalOpen(true) // 2. Defines what action to take
+  }
+
+  // Function to refresh list after update
+  const handleUpdateSuccess = () => {
+    fetchInventory() // Re-run your inventory fetch function to show updated data
+  }
+
   return (
     <div className="space-y-8 pb-10 font-sans">
       {/* Modals Layer */}
@@ -85,6 +99,14 @@ export default function InventoryPage() {
         )}
         {appState.isProductModalOpen && <AddProductModal />}
         {appState.isLocationModalOpen && <AddLocationModal />}
+        {isEditModalOpen && (
+          <EditProductModal
+            isOpen={isEditModalOpen}
+            onClose={() => setIsEditModalOpen(false)}
+            product={selectedProduct}
+            onUpdateSuccess={() => setIsEditModalOpen(false)}
+          />
+        )}
       </AnimatePresence>
 
       {/* --- 1. ACTION HEADER --- */}
@@ -272,7 +294,11 @@ export default function InventoryPage() {
           </div>
         </div>
 
-        <ProductTable locationId={selectedStore} searchQuery={searchQuery} />
+        <ProductTable
+          locationId={selectedStore}
+          searchQuery={searchQuery}
+          onEdit={handleEditClick}
+        />
       </section>
     </div>
   )
