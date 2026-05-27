@@ -27,7 +27,7 @@ export default function App() {
     // Initialize from localStorage so user stays logged in on refresh
     isLogin: Boolean(localStorage.getItem("token")),
     isReceiptOpen: false,
-    backendURL: "http://10.190.128.246:8000",
+    backendURL: "https://mtappbackend.onrender.com",
     sales: [],
     inventory: [],
     customers: [],
