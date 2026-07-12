@@ -18,6 +18,7 @@ import StaffPage from "./Pages/Staff/Staff"
 import ThermalReceipt from "./Pages/Sales/ThermalReceipt"
 import FlashMessages from "./Reusables/FlashMessage"
 import DispatchContext from "../DispatchContext"
+import StockTable from "./Pages/Inventory/StockTable"
 
 export default function MainLayout() {
   const { page } = useParams()
@@ -138,6 +139,8 @@ export default function MainLayout() {
               <CustomerPage />
             ) : page === "staff" ? (
               <StaffPage />
+            ) : page == "stock-history" ? (
+              <StockTable />
             ) : (
               <div className="h-full flex items-center justify-center text-gray-300 font-medium italic font-sans">
                 Select a module to begin
