@@ -1,22 +1,44 @@
 # 🧾 NexusPOS
 
-### Modern Point-of-Sale & Business Management Platform
+### Point-of-Sale & Business Management Platform
 
-NexusPOS is a web-based point-of-sale and business management system designed to help businesses manage **sales, products, inventory, customers, and business operations** from a centralized platform.
+**NexusPOS** is a web-based point-of-sale and business management application designed to help businesses manage their daily operations from a centralized platform.
 
-The system is being developed by **Nexus Point Innovation** with a focus on turning everyday business workflows into simple, reliable digital processes.
+It brings together core workflows such as **sales, products, inventory, customers, and transaction management** into a single application.
 
-> **NexusPOS is currently under active development.**
+> 🚧 NexusPOS is actively under development.
+
+### 🌐 Live Demo
+
+**[Launch NexusPOS →](https://mtapps.netlify.app/)**
 
 ---
 
-## 🎯 Overview
+## 📸 Screenshots
 
-Managing a growing business often involves handling sales, inventory, products, customers, and transaction records across disconnected processes.
+> Screenshots coming soon.
 
-NexusPOS brings these workflows together into a unified system, allowing businesses to manage their day-to-day operations from a single interface.
+<!--
+Add application screenshots here.
 
-The frontend provides the interactive user experience while communicating with the NexusPOS backend through APIs.
+Example:
+
+![NexusPOS Dashboard](screenshots/dashboard.png)
+
+![Point of Sale](screenshots/pos.png)
+
+![Inventory Management](screenshots/inventory.png)
+-->
+
+---
+
+## 🎯 Why NexusPOS?
+
+Many small and growing businesses manage sales, inventory, customers, and stock movements through disconnected tools or manual processes.
+
+NexusPOS is being developed to bring these workflows together into a single, easy-to-use system.
+
+The goal is to provide businesses with a reliable platform for managing their everyday operations while maintaining a clear history of business activity.
 
 ---
 
@@ -24,60 +46,63 @@ The frontend provides the interactive user experience while communicating with t
 
 ### 🛒 Point of Sale
 
-Process sales through a streamlined interface designed for day-to-day transactions.
+Process customer transactions through an intuitive point-of-sale interface.
 
 ### 📦 Inventory Management
 
-Track products and stock quantities while maintaining records of inventory activity.
-
-### 🏪 Multi-Location Support
-
-Manage business operations across multiple stores or locations from a centralized system.
+Manage products and monitor stock levels as business transactions take place.
 
 ### 👥 Customer Management
 
-Maintain customer records and associate customers with business transactions.
+Maintain customer information and associate customers with business transactions.
 
-### 📊 Business Management
+### 🏪 Multi-Location Operations
 
-Provide a centralized interface for managing products, sales, inventory, and other operational activities.
+Support business operations across multiple locations from a centralized system.
 
 ### 📜 Transaction History
 
-Maintain records of business activities for tracking and reporting.
+Maintain records of sales and inventory activities for better tracking and accountability.
+
+### 📊 Business Operations
+
+Bring essential business workflows together into a unified management interface.
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Application Architecture
 
-NexusPOS follows a client-server architecture:
+NexusPOS is designed as a client-server application:
 
 ```text
-┌──────────────────────────────┐
-│                              │
-│        NexusPOS Frontend     │
-│      React + Tailwind CSS    │
-│                              │
-└──────────────┬───────────────┘
-               │
-               │ REST API
-               ▼
-┌──────────────────────────────┐
-│                              │
-│        NexusPOS Backend      │
-│      Node.js + Express       │
-│                              │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│                              │
-│          MongoDB             │
-│                              │
-└──────────────────────────────┘
+                    ┌──────────────────────┐
+                    │                      │
+                    │      NexusPOS        │
+                    │     Frontend        │
+                    │                      │
+                    │ React + Tailwind CSS │
+                    │                      │
+                    └──────────┬───────────┘
+                               │
+                               │ REST API
+                               ▼
+                    ┌──────────────────────┐
+                    │                      │
+                    │    NexusPOS API      │
+                    │                      │
+                    │   Node.js + Express  │
+                    │                      │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │                      │
+                    │       MongoDB        │
+                    │                      │
+                    └──────────────────────┘
 ```
 
-The frontend is responsible for the user interface and client-side application logic, while the backend handles business logic, API operations, authentication, and persistent data.
+The frontend is responsible for the user interface and client-side application logic, while the backend provides the API and business logic.
 
 ---
 
@@ -85,27 +110,27 @@ The frontend is responsible for the user interface and client-side application l
 
 ### Frontend
 
-* **React**
-* **JavaScript**
-* **Tailwind CSS**
-* **Webpack**
+* React
+* JavaScript
+* Tailwind CSS
+* Webpack
 
 ### Backend
 
-* **Node.js**
-* **Express.js**
-* **REST APIs**
+* Node.js
+* Express.js
+* REST APIs
 
 ### Database
 
-* **MongoDB**
+* MongoDB
 
 ### Development & Deployment
 
-* **Git**
-* **GitHub**
-* **Yarn**
-* **Netlify**
+* Git
+* GitHub
+* Yarn
+* Netlify
 
 ---
 
@@ -124,7 +149,7 @@ NexusPOSFrontEnd/
 └── README.md
 ```
 
-The `app/` directory contains the main application source code and UI components.
+The `app/` directory contains the main application source code and user-interface components.
 
 ---
 
@@ -168,15 +193,25 @@ The application will then be available through the local development server.
 
 ## 🔐 Environment Variables
 
-If environment variables are required for the application, create a `.env` file in the project root and configure the required values.
+If environment variables are required by the application, create a `.env` file in the project root and configure the required values.
 
-**Never commit API keys, database credentials, authentication secrets, or other sensitive information to the repository.**
+Never commit:
+
+* API keys
+* Database credentials
+* Authentication secrets
+* Private tokens
+* Other sensitive configuration
 
 ---
 
 ## 🌐 Deployment
 
-The frontend is configured for deployment through **Netlify**.
+The frontend is currently deployed on **Netlify**.
+
+### Production Application
+
+**https://mtapps.netlify.app/**
 
 Deployment configuration is maintained in:
 
@@ -186,35 +221,35 @@ netlify.toml
 
 ---
 
-## 📸 Screenshots
-
-Screenshots and demonstrations of NexusPOS will be added here as the application continues to evolve.
-
----
-
 ## 🚧 Project Status
 
-NexusPOS is an actively developed project.
+NexusPOS is an actively developed product.
 
-The current development focus is on building a reliable foundation for:
+Current development focuses on building a reliable foundation for:
 
 * Point-of-sale operations
 * Inventory management
-* Multi-location business management
+* Product management
 * Customer management
-* Transaction processing
+* Multi-location operations
+* Transaction tracking
 * Business reporting
 
-Features and architecture may evolve as development continues.
+The architecture and feature set may continue to evolve as the product develops.
 
 ---
 
 ## 🏢 About
 
-NexusPOS is being developed by **Nexus Point Innovation**, a technology company focused on building practical software and digital infrastructure solutions.
+NexusPOS is being developed by **Nexus Point Innovation**, a technology company focused on building practical software and digital solutions.
 
 ---
 
-## 📄 License
+## 🔗 Related
 
-License information will be added as the project approaches its public release.
+* **Live Application:** [mtapps.netlify.app](https://mtapps.netlify.app/)
+* **Organization:** Nexus Point Innovation
+
+---
+
+### Built with React and a focus on solving real business problems.
