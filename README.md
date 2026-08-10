@@ -6,8 +6,6 @@
 
 It brings together core workflows such as **sales, products, inventory, customers, and transaction management** into a single application.
 
-> 🚧 NexusPOS is actively under development.
-
 ### 🌐 Live Demo
 
 **[Launch NexusPOS →](https://mtapps.netlify.app/)**
