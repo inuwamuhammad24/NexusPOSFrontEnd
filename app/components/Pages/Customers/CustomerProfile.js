@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from "react"
+import React, { useEffect, useState, useContext, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   X,
@@ -21,7 +21,12 @@ import StateContext from "../../../StateContext"
 import DispatchContext from "../../../DispatchContext"
 import formatNaira from "../../Reusables/NairaFormatter"
 
-export default function CustomerProfile({ isOpen, onClose, customer }) {
+export default function CustomerProfile({
+  isOpen,
+  onClose,
+  customer,
+  onUpdate,
+}) {
   const appState = useContext(StateContext)
   const appDispatch = useContext(DispatchContext)
 
@@ -52,49 +57,99 @@ export default function CustomerProfile({ isOpen, onClose, customer }) {
     }
   }, [customer, isEditing])
 
-  // Fetch Activity Ledger
+  // Fetch Activity Ledger with Token Injection
+  const fetchActivity = useCallback(
+    async cancelToken => {
+      const token = appState.user?.token || localStorage.getItem("token")
+      if (!token || !customer?._id) return
+
+      try {
+        setIsFetching(true)
+        const response = await Axios.post(
+          `${appState.backendURL}/customer-activity`,
+          {
+            token, // Required for storeGuard -> req.storeId
+            id: customer._id,
+            customerId: customer._id,
+          },
+          { cancelToken },
+        )
+        setActivity(Array.isArray(response.data) ? response.data : [])
+      } catch (error) {
+        if (!Axios.isCancel(error)) {
+          console.error("Ledger activity retrieval error:", error)
+        }
+      } finally {
+        setIsFetching(false)
+      }
+    },
+    [appState.backendURL, appState.user?.token, customer?._id],
+  )
+
   useEffect(() => {
     if (isOpen && customer?._id) {
-      const ourRequest = Axios.CancelToken.source()
-      async function fetchActivity() {
-        try {
-          setIsFetching(true)
-          const response = await Axios.post(
-            `${appState.backendURL}/customer-activity`,
-            { id: customer._id },
-            { cancelToken: ourRequest.token },
-          )
-          console.log(response.data)
-          setActivity(response.data)
-        } catch (error) {
-          if (!Axios.isCancel(error)) console.error(error)
-        } finally {
-          setIsFetching(false)
-        }
-      }
-      fetchActivity()
-      return () => ourRequest.cancel()
+      const source = Axios.CancelToken.source()
+      fetchActivity(source.token)
+      return () => source.cancel()
     }
-  }, [isOpen, customer?._id, appState.backendURL])
+  }, [isOpen, customer?._id, fetchActivity])
 
   // --- UPDATE HANDLER ---
   const handleUpdate = async () => {
+    const token = appState.user?.token || localStorage.getItem("token")
+    if (!token) {
+      appDispatch({
+        type: "addFlashMessage",
+        payload: {
+          type: "error",
+          msg: "Session expired. Please log in again.",
+        },
+      })
+      return
+    }
+
     setIsSaving(true)
     try {
-      await Axios.post(`${appState.backendURL}/update-customer`, {
+      const payload = {
+        token, // Required for storeGuard -> req.storeId
         id: customer._id,
-        ...formState,
-      })
+        customerId: customer._id,
+        name: formState.fullName.trim(),
+        fullName: formState.fullName.trim(),
+        phone: formState.phone.trim(),
+        email: formState.email.trim(),
+        address: formState.address.trim(),
+        creditLimit: Math.max(0, parseFloat(formState.creditLimit) || 0),
+      }
+
+      await Axios.post(`${appState.backendURL}/update-customer`, payload)
+
       appDispatch({
         type: "addFlashMessage",
-        payload: { type: "success", msg: "Account updated successfully!" },
+        payload: {
+          type: "success",
+          msg: "Customer profile updated successfully!",
+        },
       })
+
       setIsEditing(false)
-      onClose() // Close to refresh the parent list
+
+      // Trigger parent list and telemetry refresh
+      if (typeof onUpdate === "function") {
+        onUpdate()
+      }
+      onClose()
     } catch (e) {
+      console.error("Update customer error:", e)
       appDispatch({
         type: "addFlashMessage",
-        payload: { type: "error", msg: "Update failed." },
+        payload: {
+          type: "error",
+          msg:
+            e.response?.data?.msg ||
+            e.response?.data?.error ||
+            "Account update failed.",
+        },
       })
     } finally {
       setIsSaving(false)
@@ -105,7 +160,7 @@ export default function CustomerProfile({ isOpen, onClose, customer }) {
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -118,45 +173,56 @@ export default function CustomerProfile({ isOpen, onClose, customer }) {
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.98 }}
-          className="relative bg-white w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-gray-200"
+          className="relative bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-gray-100 z-10"
         >
           {/* Header Section */}
           <div
-            className={`px-6 py-4 flex justify-between items-center border-b transition-colors ${isEditing ? "bg-amber-50 border-amber-200" : "bg-gray-50 border-gray-200"}`}
+            className={`px-6 py-4 flex justify-between items-center border-b transition-colors ${
+              isEditing
+                ? "bg-amber-50/70 border-amber-200"
+                : "bg-slate-50/70 border-gray-100"
+            }`}
           >
             <div className="flex items-center gap-3">
               <div
-                className={`p-2 rounded-lg ${isEditing ? "bg-amber-500 text-white" : "bg-indigo-600 text-white"}`}
+                className={`p-2.5 rounded-xl ${
+                  isEditing
+                    ? "bg-amber-500 text-white"
+                    : "bg-indigo-600 text-white"
+                }`}
               >
                 {isEditing ? <Edit3 size={18} /> : <User size={18} />}
               </div>
               <div>
-                <h2 className="text-sm font-bold text-gray-800">
-                  {isEditing ? "Editing Profile" : "Customer Account"}
+                <h2 className="text-sm font-bold text-gray-900">
+                  {isEditing
+                    ? "Editing Account Profile"
+                    : "Customer Account Ledger"}
                 </h2>
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none mt-1">
+                <p className="text-[10px] text-gray-400 font-mono font-bold uppercase tracking-widest mt-0.5">
                   ID: #{customer._id?.slice(-6).toUpperCase()}
                 </p>
               </div>
             </div>
             <button
+              type="button"
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition"
             >
-              <X size={20} />
+              <X size={18} />
             </button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Identity & Contact Details */}
-              <div className="space-y-5">
+              <div className="space-y-4">
                 <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-1">
-                  Basic Information
+                  Entity Details
                 </h3>
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <EditInput
-                    label="Full Name"
+                    label="Customer / Company Name"
                     value={formState.fullName}
                     isEditing={isEditing}
                     onChange={v => setFormState({ ...formState, fullName: v })}
@@ -183,31 +249,39 @@ export default function CustomerProfile({ isOpen, onClose, customer }) {
               </div>
 
               {/* Financial Section */}
-              <div className="space-y-5">
+              <div className="space-y-4">
                 <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-1">
-                  Financial Setup
+                  Credit & Financial Parameters
                 </h3>
                 <div className="space-y-3">
                   {/* Current Debt Card */}
-                  <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 flex justify-between items-center">
+                  <div className="p-4 bg-slate-50 rounded-xl border border-gray-100 flex justify-between items-center">
                     <div>
-                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">
-                        Current Outstanding
+                      <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1.5">
+                        Current Outstanding Debt
                       </p>
                       <span
-                        className={`text-base font-black ${customer.creditBalance > 0 ? "text-rose-600" : "text-emerald-600"}`}
+                        className={`text-base font-black ${
+                          customer.creditBalance > 0
+                            ? "text-rose-600"
+                            : "text-emerald-600"
+                        }`}
                       >
                         {formatNaira(customer.creditBalance || 0)}
                       </span>
                     </div>
-                    <CreditCard size={20} className="text-gray-200" />
+                    <CreditCard size={20} className="text-gray-300" />
                   </div>
 
                   {/* Credit Limit Editor */}
                   <div
-                    className={`p-4 rounded-xl border transition-all ${isEditing ? "bg-amber-50 border-amber-200 ring-2 ring-amber-500/5" : "bg-white border-gray-200 shadow-sm"}`}
+                    className={`p-4 rounded-xl border transition-all ${
+                      isEditing
+                        ? "bg-amber-50/60 border-amber-300 ring-2 ring-amber-500/10"
+                        : "bg-white border-gray-200/80 shadow-sm"
+                    }`}
                   >
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">
+                    <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block mb-1.5">
                       Authorized Credit Limit
                     </label>
                     {isEditing ? (
@@ -217,7 +291,9 @@ export default function CustomerProfile({ isOpen, onClose, customer }) {
                         </span>
                         <input
                           type="number"
-                          className="w-full bg-white border border-amber-300 rounded-lg px-3 py-1.5 text-xs font-black outline-none focus:ring-2 focus:ring-amber-500/20"
+                          min="0"
+                          step="any"
+                          className="w-full bg-white border border-amber-300 rounded-lg px-3 py-1.5 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500/20"
                           value={formState.creditLimit}
                           onChange={e =>
                             setFormState({
@@ -228,104 +304,130 @@ export default function CustomerProfile({ isOpen, onClose, customer }) {
                         />
                       </div>
                     ) : (
-                      <p className="text-sm font-black text-gray-800">
+                      <p className="text-sm font-black text-gray-900">
                         {formatNaira(customer.creditLimit || 0)}
                       </p>
                     )}
                   </div>
 
-                  {/* Total Volume */}
-                  <div className="p-4 bg-white border border-gray-100 rounded-xl flex justify-between items-center shadow-sm">
+                  {/* Lifetime Volume */}
+                  <div className="p-4 bg-white border border-gray-200/80 rounded-xl flex justify-between items-center shadow-sm">
                     <div>
-                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">
-                        Lifetime Volume
+                      <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1.5">
+                        Lifetime Purchase Volume
                       </p>
-                      <span className="text-sm font-black text-gray-800">
+                      <span className="text-sm font-black text-gray-900">
                         {formatNaira(customer.totalSpent || 0)}
                       </span>
                     </div>
-                    <ShoppingBag size={20} className="text-gray-100" />
+                    <ShoppingBag size={20} className="text-gray-300" />
                   </div>
                 </div>
               </div>
 
-              {/* TRANSACTION LEDGER - Hidden during editing */}
+              {/* TRANSACTION LEDGER */}
               {!isEditing && (
-                <div className="md:col-span-2 space-y-3 mt-2">
+                <div className="md:col-span-2 space-y-3 pt-2">
                   <div className="flex items-center justify-between px-1">
                     <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                      <History size={14} /> Transaction Ledger
+                      <History size={14} /> Settlement & Sales Ledger
                     </h3>
-                    <span className="text-[9px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded uppercase">
-                      Recent Activity
+                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded uppercase">
+                      Audit Records
                     </span>
                   </div>
 
                   <div className="border border-gray-100 rounded-xl overflow-hidden shadow-sm bg-white">
                     <table className="w-full text-left text-xs border-collapse">
-                      <thead className="bg-gray-50/50 text-[9px] font-black text-gray-400 uppercase border-b border-gray-100">
+                      <thead className="bg-slate-50/70 text-[9px] font-bold text-gray-400 uppercase border-b border-gray-100">
                         <tr>
-                          <th className="p-4">Type</th>
-                          <th className="p-4">Note / Memo</th>
-                          <th className="p-4">Date</th>
-                          <th className="p-4 text-right">Amount</th>
-                          <th className="p-4 text-right">Running Bal.</th>
+                          <th className="py-3 px-4">Event Type</th>
+                          <th className="py-3 px-4">Memo / Reference</th>
+                          <th className="py-3 px-4">Date</th>
+                          <th className="py-3 px-4 text-right">Value</th>
+                          <th className="py-3 px-4 text-right">
+                            Running Balance
+                          </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-50">
+                      <tbody className="divide-y divide-gray-100 text-[11px]">
                         {isFetching ? (
                           <tr>
-                            <td colSpan="5" className="p-12 text-center">
+                            <td colSpan="5" className="p-10 text-center">
                               <Loader2
-                                className="animate-spin mx-auto text-indigo-500"
-                                size={24}
+                                className="animate-spin mx-auto text-indigo-600"
+                                size={22}
                               />
                             </td>
                           </tr>
                         ) : activity.length > 0 ? (
-                          activity.map(item => (
-                            <tr
-                              key={item._id}
-                              className="hover:bg-gray-50 transition-colors group"
-                            >
-                              <td className="p-4">
-                                <span
-                                  className={`px-2 py-0.5 rounded-[4px] text-[8px] font-black uppercase tracking-tighter ${item.type === "PAYMENT" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}
-                                >
-                                  {item.type}
-                                </span>
-                              </td>
-                              {/* Display Note with smart fallback to Reference ID */}
-                              <td className="p-4 text-gray-600 font-bold max-w-[140px] truncate group-hover:whitespace-normal group-hover:overflow-visible group-hover:max-w-none">
-                                {item.note ||
-                                  `Invoice #${item.referenceId?.slice(-6).toUpperCase() || "N/A"}`}
-                              </td>
-                              <td className="p-4 text-gray-400 font-medium">
-                                {new Date(
-                                  item.timestamp || item.createdAt,
-                                ).toLocaleDateString("en-GB", {
-                                  day: "2-digit",
-                                  month: "short",
-                                })}
-                              </td>
-                              <td
-                                className={`p-4 font-black text-right ${item.type === "PAYMENT" ? "text-emerald-600" : "text-gray-900"}`}
+                          activity.map(item => {
+                            const isPayment =
+                              (item.type || "").toUpperCase() === "PAYMENT" ||
+                              (item.type || "").toUpperCase() === "SETTLEMENT"
+
+                            return (
+                              <tr
+                                key={item._id}
+                                className="hover:bg-slate-50/60 transition-colors"
                               >
-                                {item.type === "PAYMENT" ? "-" : "+"}
-                                {formatNaira(item.amount)}
-                              </td>
-                              <td className="p-4 font-black text-right text-gray-800 bg-gray-50/30">
-                                {formatNaira(item.runningBalance)}
-                              </td>
-                            </tr>
-                          ))
+                                <td className="py-3 px-4">
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                                      isPayment
+                                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                        : "bg-rose-50 text-rose-700 border border-rose-200"
+                                    }`}
+                                  >
+                                    {item.type ||
+                                      (item.invoiceId
+                                        ? "Credit Sale"
+                                        : "Transaction")}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-gray-700 font-semibold max-w-[150px] truncate">
+                                  {item.note ||
+                                    item.invoiceId ||
+                                    "POS Settlement"}
+                                </td>
+                                <td className="py-3 px-4 text-gray-400">
+                                  {new Date(
+                                    item.timestamp || item.createdAt,
+                                  ).toLocaleDateString([], {
+                                    day: "2-digit",
+                                    month: "short",
+                                  })}
+                                </td>
+                                <td
+                                  className={`py-3 px-4 font-bold text-right ${
+                                    isPayment
+                                      ? "text-emerald-600"
+                                      : "text-gray-900"
+                                  }`}
+                                >
+                                  {isPayment ? "-" : "+"}
+                                  {formatNaira(
+                                    item.paid || item.total || item.amount || 0,
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 font-bold text-right text-gray-900 bg-slate-50/30">
+                                  {formatNaira(
+                                    item.runningCreditBalance ??
+                                      item.runningBalance ??
+                                      0,
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })
                         ) : (
                           <tr>
                             <td
                               colSpan="5"
-                              className="p-12 text-center text-gray-400 italic"
+                              className="p-8 text-center text-gray-400 text-xs italic"
                             >
-                              No financial movements found.
+                              No financial ledger transactions logged for this
+                              account.
                             </td>
                           </tr>
                         )}
@@ -338,36 +440,41 @@ export default function CustomerProfile({ isOpen, onClose, customer }) {
           </div>
 
           {/* Action Footer */}
-          <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-between items-center">
-            <button className="flex items-center gap-1.5 text-[10px] font-black text-gray-300 hover:text-rose-600 uppercase tracking-widest transition-colors">
-              <ShieldAlert size={16} /> Delete Account
-            </button>
+          <div className="px-6 py-4 bg-slate-50/70 border-t border-gray-100 flex justify-between items-center">
+            <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">
+              {customer.phone || "No direct phone verified"}
+            </span>
+
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={() => (isEditing ? setIsEditing(false) : onClose())}
-                className="px-5 py-2 text-[10px] font-black text-gray-400 hover:text-gray-800 uppercase tracking-widest transition-colors"
+                className="px-4 py-2 text-[10px] font-bold text-gray-500 hover:text-gray-800 uppercase tracking-widest transition"
               >
                 {isEditing ? "Discard" : "Close"}
               </button>
               {isEditing ? (
                 <button
+                  type="button"
                   onClick={handleUpdate}
                   disabled={isSaving}
-                  className="flex items-center gap-2 px-8 py-2.5 bg-emerald-600 text-white rounded-xl font-black text-[10px] shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition active:scale-95 uppercase tracking-widest"
+                  className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white rounded-xl font-bold text-[10px] shadow-sm hover:bg-emerald-700 transition active:scale-95 uppercase tracking-widest disabled:opacity-50"
                 >
                   {isSaving ? (
-                    <Loader2 className="animate-spin" size={14} />
+                    <Loader2 className="animate-spin" size={13} />
                   ) : (
-                    <Save size={14} />
+                    <Save size={13} />
                   )}
-                  Save Account
+                  <span>Save Changes</span>
                 </button>
               ) : (
                 <button
+                  type="button"
                   onClick={() => setIsEditing(true)}
-                  className="flex items-center gap-2 px-8 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition active:scale-95 uppercase tracking-widest"
+                  className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold text-[10px] shadow-sm hover:bg-indigo-700 transition active:scale-95 uppercase tracking-widest"
                 >
-                  <Edit3 size={14} /> Edit Profile
+                  <Edit3 size={13} />
+                  <span>Edit Profile</span>
                 </button>
               )}
             </div>
@@ -378,22 +485,23 @@ export default function CustomerProfile({ isOpen, onClose, customer }) {
   )
 }
 
-// --- HELPER COMPONENT ---
-const EditInput = ({ label, value, isEditing, onChange }) => (
-  <div className="space-y-1">
-    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-0.5">
-      {label}
-    </label>
-    {isEditing ? (
-      <input
-        className="w-full text-xs font-bold text-gray-800 bg-white border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-amber-500 transition-all"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-      />
-    ) : (
-      <p className="text-xs font-bold text-gray-700 pl-0.5 border-b border-transparent">
-        {value || "---"}
-      </p>
-    )}
-  </div>
-)
+function EditInput({ label, value, isEditing, onChange }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest ml-0.5">
+        {label}
+      </label>
+      {isEditing ? (
+        <input
+          className="w-full text-xs font-bold text-gray-800 bg-white border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+        />
+      ) : (
+        <p className="text-xs font-semibold text-gray-800 pl-0.5">
+          {value || "---"}
+        </p>
+      )}
+    </div>
+  )
+}

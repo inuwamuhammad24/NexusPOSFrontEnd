@@ -1,13 +1,14 @@
 import React, { useState, useContext } from "react"
 import { motion } from "framer-motion"
-import { X, Warehouse, Store, MapPin, User, Hash, Info } from "lucide-react"
+import { X, Warehouse, Store, MapPin, User, Hash, Loader2 } from "lucide-react"
 import Axios from "axios"
 import DispatchContext from "../../../DispatchContext"
 import StateContext from "../../../StateContext"
 
-export default function AddLocationModal() {
+export default function AddLocationModal({ onSuccess }) {
   const appState = useContext(StateContext)
   const appDispatch = useContext(DispatchContext)
+
   const [formData, setFormData] = useState({
     name: "",
     type: "Warehouse",
@@ -15,27 +16,66 @@ export default function AddLocationModal() {
     manager: "",
     address: "",
   })
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleSubmit = async e => {
     e.preventDefault()
-    // Axios.post logic here
+
+    const token = appState.user?.token || localStorage.getItem("token")
+    if (!token) {
+      appDispatch({
+        type: "addFlashMessage",
+        payload: {
+          type: "error",
+          msg: "Session expired. Please log in again.",
+        },
+      })
+      return
+    }
+
+    setIsSubmitting(true)
+
     try {
       const response = await Axios.post(
         `${appState.backendURL}/create-location`,
-        formData,
+        {
+          token, // Required for storeGuard -> req.storeId
+          name: formData.name.trim(),
+          type: formData.type,
+          code: formData.code.trim().toUpperCase(),
+          manager: formData.manager.trim(),
+          address: formData.address.trim(),
+        },
       )
+
       if (response.data) {
         appDispatch({ type: "closeLocationModal" })
         appDispatch({
           type: "addFlashMessage",
-          payload: { type: "success", msg: "Location created successfully!" },
+          payload: {
+            type: "success",
+            msg: `Storage node "${formData.name}" registered successfully!`,
+          },
         })
+
+        if (typeof onSuccess === "function") {
+          onSuccess(response.data)
+        }
       }
     } catch (error) {
+      console.error("Location creation failure:", error)
       appDispatch({
         type: "addFlashMessage",
-        payload: { type: "error", msg: "Failed to create location." },
+        payload: {
+          type: "error",
+          msg:
+            error.response?.data?.msg ||
+            error.response?.data?.message ||
+            "Failed to initialize storage node.",
+        },
       })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -44,21 +84,22 @@ export default function AddLocationModal() {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white w-full max-w-md rounded-lg shadow-2xl overflow-hidden"
+        className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-gray-100"
       >
-        {/* Header - Scaled Down */}
-        <div className="px-6 py-4 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
           <div>
             <h2 className="text-sm font-black text-gray-800 uppercase tracking-tight">
               New Storage Node
             </h2>
             <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">
-              Register Warehouse or Store
+              Register Warehouse or Storefront
             </p>
           </div>
           <button
+            type="button"
             onClick={() => appDispatch({ type: "closeLocationModal" })}
-            className="text-gray-400 hover:text-gray-600 transition"
+            className="text-gray-400 hover:text-gray-600 transition p-1"
           >
             <X size={18} />
           </button>
@@ -66,14 +107,14 @@ export default function AddLocationModal() {
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* 1. COMPACT TYPE SELECTOR */}
-          <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-lg">
+          <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl">
             <button
               type="button"
               onClick={() => setFormData({ ...formData, type: "Warehouse" })}
               className={`flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${
                 formData.type === "Warehouse"
                   ? "bg-white text-indigo-600 shadow-sm"
-                  : "text-gray-400"
+                  : "text-gray-500 hover:text-gray-700"
               }`}
             >
               <Warehouse size={14} /> Warehouse
@@ -84,7 +125,7 @@ export default function AddLocationModal() {
               className={`flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${
                 formData.type === "Frontend"
                   ? "bg-white text-emerald-600 shadow-sm"
-                  : "text-gray-400"
+                  : "text-gray-500 hover:text-gray-700"
               }`}
             >
               <Store size={14} /> Storefront
@@ -92,7 +133,7 @@ export default function AddLocationModal() {
           </div>
 
           <div className="space-y-3">
-            {/* 2. NAME & CODE (Small Labels) */}
+            {/* 2. NAME & CODE */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
@@ -100,7 +141,7 @@ export default function AddLocationModal() {
                 </label>
                 <input
                   required
-                  className="w-full px-4 py-2 bg-gray-50 border-none rounded-xl text-xs font-bold text-gray-700 focus:ring-2 focus:ring-indigo-500 transition-all outline-none"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-gray-700 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
                   placeholder="e.g. Kano Hub"
                   value={formData.name}
                   onChange={e =>
@@ -112,18 +153,24 @@ export default function AddLocationModal() {
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
                   Ref Code
                 </label>
-                <input
-                  required
-                  className="w-full px-4 py-2 bg-gray-50 border-none rounded-xl text-xs font-bold text-gray-700 focus:ring-2 focus:ring-indigo-500 transition-all outline-none"
-                  placeholder="WH-01"
-                  value={formData.code}
-                  onChange={e =>
-                    setFormData({
-                      ...formData,
-                      code: e.target.value.toUpperCase(),
-                    })
-                  }
-                />
+                <div className="relative">
+                  <Hash
+                    className="absolute left-3 top-3 text-gray-300 pointer-events-none"
+                    size={12}
+                  />
+                  <input
+                    required
+                    className="w-full pl-8 pr-3 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-mono font-bold text-gray-700 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none uppercase"
+                    placeholder="WH-01"
+                    value={formData.code}
+                    onChange={e =>
+                      setFormData({
+                        ...formData,
+                        code: e.target.value.toUpperCase(),
+                      })
+                    }
+                  />
+                </div>
               </div>
             </div>
 
@@ -134,13 +181,13 @@ export default function AddLocationModal() {
               </label>
               <div className="relative">
                 <User
-                  className="absolute left-3.5 top-2.5 text-gray-300"
+                  className="absolute left-3.5 top-3 text-gray-300 pointer-events-none"
                   size={14}
                 />
                 <input
                   required
-                  className="w-full pl-9 pr-4 py-2 bg-gray-50 border-none rounded-xl text-xs font-bold text-gray-700 focus:ring-2 focus:ring-indigo-500 transition-all outline-none"
-                  placeholder="Full name"
+                  className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-gray-700 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                  placeholder="Manager full name"
                   value={formData.manager}
                   onChange={e =>
                     setFormData({ ...formData, manager: e.target.value })
@@ -156,13 +203,13 @@ export default function AddLocationModal() {
               </label>
               <div className="relative">
                 <MapPin
-                  className="absolute left-3.5 top-2.5 text-gray-300"
+                  className="absolute left-3.5 top-3 text-gray-300 pointer-events-none"
                   size={14}
                 />
                 <textarea
                   required
                   rows="2"
-                  className="w-full pl-9 pr-4 py-2 bg-gray-50 border-none rounded-xl text-xs font-bold text-gray-700 focus:ring-2 focus:ring-indigo-500 transition-all outline-none resize-none"
+                  className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-gray-700 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none resize-none"
                   placeholder="Physical street address"
                   value={formData.address}
                   onChange={e =>
@@ -177,6 +224,7 @@ export default function AddLocationModal() {
           <div className="flex gap-3 pt-2">
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={() => appDispatch({ type: "closeLocationModal" })}
               className="flex-1 py-3 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-600 transition"
             >
@@ -184,13 +232,21 @@ export default function AddLocationModal() {
             </button>
             <button
               type="submit"
-              className={`flex-[2] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-lg transition-all active:scale-95 ${
+              disabled={isSubmitting}
+              className={`flex-[2] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-lg transition-all active:scale-95 disabled:bg-gray-200 disabled:shadow-none flex items-center justify-center gap-2 ${
                 formData.type === "Warehouse"
                   ? "bg-indigo-600 shadow-indigo-100 hover:bg-indigo-700"
                   : "bg-emerald-600 shadow-emerald-100 hover:bg-emerald-700"
               }`}
             >
-              Initialize Node
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="animate-spin" size={14} />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <span>Initialize Node</span>
+              )}
             </button>
           </div>
         </form>

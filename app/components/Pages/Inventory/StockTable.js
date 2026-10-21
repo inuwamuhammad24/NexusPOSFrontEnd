@@ -1,21 +1,28 @@
-import React, { useEffect, useState, useRef, useContext } from "react"
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useContext,
+  useCallback,
+} from "react"
 import {
   FileText,
   Search,
   Calendar,
-  Filter,
   PackagePlus,
   Loader2,
   X,
   ArrowRightLeft,
   PlusCircle,
+  ArrowDownLeft,
+  ArrowUpRight,
 } from "lucide-react"
 import { motion } from "framer-motion"
 import Axios from "axios"
 import StateContext from "../../../StateContext"
 import DispatchContext from "../../../DispatchContext"
 
-export default function StockTable() {
+export default function StockTable({ refreshSignal = 0 }) {
   const appState = useContext(StateContext)
   const appDispatch = useContext(DispatchContext)
 
@@ -30,74 +37,91 @@ export default function StockTable() {
   const sentinelRef = useRef(null)
 
   // --- LOGIC: FETCH INVENTORY AGGREGATIONS ---
-  const fetchStockHistory = async (isNewSearch = false) => {
-    // Prevent overlapping network queries
-    if (isFetching && !isNewSearch) return
-    setIsFetching(true)
+  const fetchStockHistory = useCallback(
+    async (isNewSearch = false) => {
+      if (isFetching || (!hasMore && !isNewSearch)) return
 
-    const currentLastId = isNewSearch ? null : lastId
+      const token = appState.user?.token || localStorage.getItem("token")
+      if (!token) {
+        setIsFetching(false)
+        return
+      }
 
-    try {
-      const response = await Axios.post(
-        `${appState.backendURL}/all-stock-activity`,
-        {
+      setIsFetching(true)
+      const currentLastId = isNewSearch ? null : lastId
+
+      try {
+        const payload = {
+          token, // Required for storeGuard -> req.storeId
+          lastId: currentLastId,
+          query: query.trim(),
+          date: filterDate,
+          limit: 15,
           params: {
             lastId: currentLastId,
-            query: query,
+            query: query.trim(),
             date: filterDate,
             limit: 15,
           },
-        },
-      )
+        }
 
-      if (response.data && response.data.length > 0) {
-        setActivities(prev =>
-          isNewSearch ? response.data : [...prev, ...response.data],
+        const response = await Axios.post(
+          `${appState.backendURL}/all-stock-activity`,
+          payload,
         )
-        setLastId(response.data[response.data.length - 1]._id)
-        setHasMore(response.data.length === 15)
-      } else {
-        if (isNewSearch) setActivities([])
-        setHasMore(false)
-      }
-    } catch (e) {
-      console.error("Stock matrix fetch network error:", e)
-      setHasMore(false)
-    } finally {
-      setIsFetching(false)
-    }
-  }
 
-  // --- LOGIC: SEARCH DEBOUNCE (500MS) ---
+        const incoming = Array.isArray(response.data) ? response.data : []
+
+        if (incoming.length > 0) {
+          setActivities(prev => {
+            if (isNewSearch) return incoming
+            const existingIds = new Set(prev.map(a => a._id))
+            const unique = incoming.filter(a => !existingIds.has(a._id))
+            return [...prev, ...unique]
+          })
+          setLastId(incoming[incoming.length - 1]._id)
+          setHasMore(incoming.length === 15)
+        } else {
+          if (isNewSearch) setActivities([])
+          setHasMore(false)
+        }
+      } catch (e) {
+        console.error("Stock matrix fetch network error:", e)
+        setHasMore(false)
+      } finally {
+        setIsFetching(false)
+      }
+    },
+    [
+      appState.backendURL,
+      appState.user?.token,
+      query,
+      filterDate,
+      lastId,
+      hasMore,
+      isFetching,
+    ],
+  )
+
+  // Search Debounce (350ms) & Filter Watcher
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
+      setActivities([])
+      setLastId(null)
+      setHasMore(true)
       fetchStockHistory(true)
-    }, 500)
+    }, 350)
     return () => clearTimeout(delayDebounceFn)
-  }, [query])
+  }, [query, filterDate, refreshSignal])
 
-  // --- CRITICAL FIX: INSTANT LOADER FOR DATE FILTER ---
-  useEffect(() => {
-    // 1. Instantly trip the loader thread to true before async execution hits the engine
-    setIsFetching(true)
-
-    // 2. Wipe the previous collection view states so old logs don't hang around
-    setActivities([])
-    setLastId(null)
-    setHasMore(true)
-
-    // 3. Ignite the new ledger tracking run
-    fetchStockHistory(true)
-  }, [filterDate])
-
-  // --- LOGIC: INFINITE SCROLL OBSERVER ---
+  // Infinite Scroll Observer
   useEffect(() => {
     if (!hasMore || isFetching || !sentinelRef.current) return
 
     const observer = new IntersectionObserver(
       entries => {
         if (entries[0].isIntersecting && hasMore && !isFetching) {
-          fetchStockHistory()
+          fetchStockHistory(false)
         }
       },
       { threshold: 0.1, rootMargin: "50px" },
@@ -105,7 +129,34 @@ export default function StockTable() {
 
     observer.observe(sentinelRef.current)
     return () => observer.disconnect()
-  }, [lastId, hasMore, isFetching, activities.length])
+  }, [lastId, hasMore, isFetching, fetchStockHistory])
+
+  // Operation Type Visual Mapper
+  const renderBadge = type => {
+    const t = (type || "").toUpperCase()
+
+    if (t === "ARRIVAL" || t === "RESTOCK") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <ArrowDownLeft size={11} /> Inflow
+        </span>
+      )
+    }
+
+    if (t === "TRANSFER") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
+          <ArrowRightLeft size={11} /> Transfer
+        </span>
+      )
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200">
+        <ArrowUpRight size={11} /> Sale Outflow
+      </span>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -117,8 +168,8 @@ export default function StockTable() {
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search Product name, Operator..."
-            className="w-full pl-10 pr-10 py-2 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+            placeholder="Search Product name, Operator, Invoice..."
+            className="w-full pl-10 pr-10 py-2 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 transition-all font-medium outline-none"
           />
           {query && (
             <button
@@ -131,8 +182,8 @@ export default function StockTable() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
-          {/* CALENDAR FILTER FIELD */}
-          <div className="relative flex items-center bg-gray-50 border border-transparent rounded-xl px-3 py-1.5 focus-within:bg-white focus-within:border-blue-500 transition-all shadow-sm">
+          {/* Calendar Filter Field */}
+          <div className="relative flex items-center bg-gray-50 border border-transparent rounded-xl px-3 py-1.5 focus-within:bg-white focus-within:border-indigo-500 transition-all shadow-sm">
             <Calendar size={14} className="text-gray-400 mr-2" />
             <input
               type="date"
@@ -151,13 +202,13 @@ export default function StockTable() {
             )}
           </div>
 
-          <button className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-50 rounded-xl hover:bg-gray-100 transition">
-            <Filter size={16} />
-            Filters
-          </button>
           <button
-            onClick={() => appDispatch({ type: "openReceiveStockModal" })}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-md active:scale-95"
+            type="button"
+            onClick={() => {
+              appDispatch({ type: "openArrivalModal" })
+              appDispatch({ type: "openReceiveStockModal" })
+            }}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition shadow-md active:scale-95"
           >
             <PackagePlus size={16} />
             Receive Stock
@@ -165,13 +216,12 @@ export default function StockTable() {
         </div>
       </div>
 
-      {/* 2. Professional Stock Ledger Table Frame */}
+      {/* 2. Stock Ledger Table Frame */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col min-h-[400px] relative">
-        {/* --- EXPLICIT SYSTEM LEVEL SCREEN LOADER BLANKET --- */}
-        {/* Shows an elegant loading overlay if fetching and there are no current activities to display */}
+        {/* Loading Overlay */}
         {isFetching && activities.length === 0 && (
-          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-3 animate-fade-in">
-            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-3">
+            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
               Filtering Interval Log Node...
             </p>
@@ -200,75 +250,86 @@ export default function StockTable() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {activities.map(act => (
-                <motion.tr
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  key={act._id}
-                  className="hover:bg-blue-50/30 transition-colors group"
-                >
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`p-2 rounded-lg transition-all shadow-sm ${act.type === "TRANSFER" ? "bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white" : "bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white"}`}
-                      >
-                        {act.type === "TRANSFER" ? (
-                          <ArrowRightLeft size={16} />
-                        ) : (
-                          <PlusCircle size={16} />
-                        )}
+              {activities.map(act => {
+                const vol = act.quantity ?? act.bulkQuantity ?? act.change ?? 0
+                const isPositive = Number(vol) > 0
+
+                return (
+                  <motion.tr
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    key={act._id}
+                    className="hover:bg-indigo-50/30 transition-colors group"
+                  >
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`p-2 rounded-lg transition-all shadow-sm ${
+                            act.type === "TRANSFER"
+                              ? "bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white"
+                              : isPositive
+                                ? "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white"
+                                : "bg-rose-50 text-rose-600 group-hover:bg-rose-600 group-hover:text-white"
+                          }`}
+                        >
+                          {act.type === "TRANSFER" ? (
+                            <ArrowRightLeft size={16} />
+                          ) : (
+                            <PlusCircle size={16} />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-gray-800 uppercase tracking-tight">
+                            {act.productName ||
+                              act.productDetails?.name ||
+                              "Stock Asset Line"}
+                          </p>
+                          <p className="text-[10px] text-gray-400 font-medium">
+                            {new Date(
+                              act.timestamp || act.createdAt || Date.now(),
+                            ).toLocaleString([], {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            })}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-bold text-gray-800 uppercase tracking-tight">
-                          {act.productName || "Unknown Asset"}
-                        </p>
-                        <p className="text-[10px] text-gray-400 font-medium italic">
-                          {new Date(act.timestamp).toLocaleString([], {
-                            dateStyle: "short",
-                            timeStyle: "short",
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                        act.type === "TRANSFER"
-                          ? "bg-amber-100 text-amber-700 border border-amber-200"
-                          : "bg-blue-100 text-blue-700 border border-blue-200"
-                      }`}
-                    >
-                      {act.type}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600 font-medium max-w-xs truncate">
-                    {act.storeName || "Main Node Warehouse"}
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className="text-sm font-black text-gray-900 bg-gray-50 px-2.5 py-1 rounded-lg border border-gray-100 font-mono">
-                      {act.quantity > 0 ? `+${act.quantity}` : act.quantity}
-                      <span className="text-[9px] text-gray-400 ml-1 font-sans normal-case font-bold">
-                        {act.unitType}
+                    </td>
+
+                    <td className="px-6 py-4">{renderBadge(act.type)}</td>
+
+                    <td className="px-6 py-4 text-sm text-gray-600 font-medium max-w-xs truncate">
+                      {act.storeName ||
+                        act.locationName ||
+                        "Main Counter / Warehouse"}
+                    </td>
+
+                    <td className="px-6 py-4 text-center">
+                      <span className="text-sm font-black text-gray-900 bg-gray-50 px-2.5 py-1 rounded-lg border border-gray-100 font-mono">
+                        {isPositive ? `+${vol}` : vol}
+                        <span className="text-[9px] text-gray-400 ml-1 font-sans normal-case font-bold">
+                          {act.unitType || "Units"}
+                        </span>
                       </span>
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right text-xs font-black uppercase tracking-tight text-gray-500">
-                    {act.performedBy || "System_Core"}
-                  </td>
-                </motion.tr>
-              ))}
+                    </td>
+
+                    <td className="px-6 py-4 text-right text-xs font-black uppercase tracking-tight text-gray-500">
+                      {act.performedBy || act.staffName || "Staff"}
+                    </td>
+                  </motion.tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
 
-        {/* 3. SEEKER SENTINEL PAGINATION WRAPPER */}
+        {/* 3. Infinite Scroll Sentinel */}
         {hasMore ? (
           <div
             ref={sentinelRef}
             className="px-6 py-10 bg-gray-50/30 border-t border-gray-100 flex flex-col items-center justify-center min-h-[80px]"
           >
-            <div className="flex items-center gap-3 text-blue-600">
+            <div className="flex items-center gap-3 text-indigo-600">
               <Loader2 className="animate-spin" size={20} />
               <span className="text-[10px] font-bold uppercase tracking-widest">
                 Aggregating Inventory Logs...
@@ -276,24 +337,21 @@ export default function StockTable() {
             </div>
           </div>
         ) : activities.length > 0 ? (
-          <div className="px-6 py-10 bg-gray-50/30 border-t border-gray-100 flex items-center justify-center gap-4 opacity-30 select-none">
-            <div className="h-px w-12 bg-gray-300"></div>
+          <div className="px-6 py-10 bg-gray-50/30 border-t border-gray-100 flex items-center justify-center gap-4 opacity-40 select-none">
+            <div className="h-px w-12 bg-gray-300" />
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
               Complete Inventory Audit Trail Loaded
             </p>
-            <div className="h-px w-12 bg-gray-300"></div>
+            <div className="h-px w-12 bg-gray-300" />
           </div>
-        ) : (
-          /* Show this cleanly once filtering completely resolves with zero records found */
-          !isFetching && (
-            <div className="text-center opacity-40 py-12 border-t border-gray-100">
-              <FileText size={32} className="mx-auto mb-2 text-gray-400" />
-              <p className="text-xs font-medium italic text-gray-500">
-                No ledger alterations match criteria
-              </p>
-            </div>
-          )
-        )}
+        ) : !isFetching ? (
+          <div className="text-center opacity-40 py-12 border-t border-gray-100">
+            <FileText size={32} className="mx-auto mb-2 text-gray-400" />
+            <p className="text-xs font-medium italic text-gray-500">
+              No ledger alterations match criteria
+            </p>
+          </div>
+        ) : null}
       </div>
     </div>
   )

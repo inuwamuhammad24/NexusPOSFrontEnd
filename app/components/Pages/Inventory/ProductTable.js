@@ -1,4 +1,10 @@
-import React, { useEffect, useState, useRef, useContext } from "react"
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useContext,
+  useCallback,
+} from "react"
 import Axios from "axios"
 import StateContext from "../../../StateContext"
 import DispatchContext from "../../../DispatchContext"
@@ -12,8 +18,12 @@ import {
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 
-// ADDED: onEdit prop received from InventoryPage
-export default function ProductTable({ locationId, searchQuery, onEdit }) {
+export default function ProductTable({
+  locationId,
+  searchQuery,
+  onEdit,
+  refreshSignal = 0,
+}) {
   const appState = useContext(StateContext)
   const appDispatch = useContext(DispatchContext)
 
@@ -21,7 +31,6 @@ export default function ProductTable({ locationId, searchQuery, onEdit }) {
   const [lastId, setLastId] = useState(null)
   const [hasMore, setHasMore] = useState(true)
   const [isFetching, setIsFetching] = useState(false)
-
   const [isInitialLoading, setIsInitialLoading] = useState(true)
 
   const sentinelRef = useRef(null)
@@ -34,48 +43,67 @@ export default function ProductTable({ locationId, searchQuery, onEdit }) {
     }).format(amount || 0)
   }
 
-  const fetchProducts = async (isNewSearch = false) => {
-    if (isFetching || (!hasMore && !isNewSearch)) return
+  const fetchProducts = useCallback(
+    async (isNewSearch = false) => {
+      if (isFetching || (!hasMore && !isNewSearch)) return
 
-    setIsFetching(true)
-    if (isNewSearch) setIsInitialLoading(true)
+      const token = appState.user?.token || localStorage.getItem("token")
+      if (!token) return
 
-    const currentLastId = isNewSearch ? null : lastId
+      setIsFetching(true)
+      if (isNewSearch) setIsInitialLoading(true)
 
-    try {
-      const response = await Axios.post(`${appState.backendURL}/get-products`, {
-        locationId: locationId,
-        query: searchQuery,
-        lastId: currentLastId,
-        limit: 15,
-      })
+      const currentLastId = isNewSearch ? null : lastId
 
-      if (response.data && response.data.length > 0) {
-        console.log(response.data)
-        setProducts(prev =>
-          isNewSearch ? response.data : [...prev, ...response.data],
+      try {
+        const response = await Axios.post(
+          `${appState.backendURL}/get-products`,
+          {
+            token, // Required by storeGuard to extract storeId
+            locationId: locationId || undefined,
+            query: searchQuery?.trim() || undefined,
+            lastId: currentLastId,
+            limit: 15,
+          },
         )
-        setLastId(response.data[response.data.length - 1]._id)
-        setHasMore(response.data.length === 15)
-      } else {
-        if (isNewSearch) setProducts([])
-        setHasMore(false)
-      }
-    } catch (e) {
-      console.error("Inventory Fetch Error:", e)
-      setHasMore(false)
-    } finally {
-      setIsFetching(false)
-      setIsInitialLoading(false)
-    }
-  }
 
+        if (response.data && response.data.length > 0) {
+          setProducts(prev =>
+            isNewSearch ? response.data : [...prev, ...response.data],
+          )
+          setLastId(response.data[response.data.length - 1]._id)
+          setHasMore(response.data.length === 15)
+        } else {
+          if (isNewSearch) setProducts([])
+          setHasMore(false)
+        }
+      } catch (e) {
+        console.error("Inventory Fetch Error:", e)
+        setHasMore(false)
+      } finally {
+        setIsFetching(false)
+        setIsInitialLoading(false)
+      }
+    },
+    [
+      appState.backendURL,
+      appState.user?.token,
+      locationId,
+      searchQuery,
+      lastId,
+      hasMore,
+      isFetching,
+    ],
+  )
+
+  // Reset and reload whenever search query, location filter, or refreshSignal changes
   useEffect(() => {
     setLastId(null)
     setHasMore(true)
     fetchProducts(true)
-  }, [searchQuery, locationId])
+  }, [searchQuery, locationId, refreshSignal])
 
+  // Infinite scroll observer
   useEffect(() => {
     const observer = new IntersectionObserver(
       entries => {
@@ -85,14 +113,14 @@ export default function ProductTable({ locationId, searchQuery, onEdit }) {
           !isFetching &&
           !isInitialLoading
         ) {
-          fetchProducts()
+          fetchProducts(false)
         }
       },
       { threshold: 0.1 },
     )
     if (sentinelRef.current) observer.observe(sentinelRef.current)
     return () => observer.disconnect()
-  }, [lastId, hasMore, isFetching, isInitialLoading])
+  }, [hasMore, isFetching, isInitialLoading, fetchProducts])
 
   return (
     <div className="w-full relative">
@@ -134,7 +162,7 @@ export default function ProductTable({ locationId, searchQuery, onEdit }) {
                           className="animate-spin text-indigo-600"
                           size={32}
                         />
-                        <div className="absolute inset-0 blur-xl bg-indigo-500/20 animate-pulse"></div>
+                        <div className="absolute inset-0 blur-xl bg-indigo-500/20 animate-pulse" />
                       </div>
                       <div className="text-center">
                         <p className="text-[11px] font-black text-gray-800 uppercase tracking-tighter">
@@ -148,79 +176,90 @@ export default function ProductTable({ locationId, searchQuery, onEdit }) {
                   </td>
                 </motion.tr>
               ) : (
-                products.map(item => (
-                  <motion.tr
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    key={item._id}
-                    className="hover:bg-indigo-50/30 transition-colors group"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-gray-50 text-gray-400 group-hover:bg-indigo-600 group-hover:text-white rounded-xl transition-all shadow-sm">
-                          <Package size={18} />
+                products.map(item => {
+                  const prod = item.details || item
+                  const stockCount = item.bulkQuantity ?? item.quantity ?? 0
+
+                  return (
+                    <motion.tr
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      key={item._id}
+                      className="hover:bg-indigo-50/30 transition-colors group"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-gray-50 text-gray-400 group-hover:bg-indigo-600 group-hover:text-white rounded-xl transition-all shadow-sm">
+                            <Package size={18} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-gray-800 leading-none">
+                              {prod.name}
+                            </p>
+                            <p className="text-[10px] text-gray-400 mt-1.5 font-bold uppercase tracking-tighter">
+                              {prod.sku || "N/A"} •{" "}
+                              {item.unitType ||
+                                prod.unitType ||
+                                prod.packaging ||
+                                "Units"}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-bold text-gray-800 leading-none">
-                            {item.details?.name || item.name}
-                          </p>
-                          <p className="text-[10px] text-gray-400 mt-1.5 font-bold uppercase tracking-tighter">
-                            {item.details?.sku || item.sku} •{" "}
-                            {item.details?.packaging ||
-                              item.packaging ||
-                              "Units"}
-                          </p>
+                      </td>
+
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex flex-col items-center">
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-black border ${
+                              stockCount <= 5
+                                ? "bg-red-50 text-red-600 border-red-100"
+                                : "bg-indigo-50 text-indigo-700 border-indigo-100"
+                            }`}
+                          >
+                            {stockCount}
+                          </span>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    <td className="px-6 py-4 text-center">
-                      <div className="flex flex-col items-center">
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-black border ${item.bulkQuantity <= 5 ? "bg-red-50 text-red-600 border-red-100" : "bg-indigo-50 text-indigo-700 border-indigo-100"}`}
-                        >
-                          {item.bulkQuantity || 0}
-                        </span>
-                      </div>
-                    </td>
+                      <td className="px-6 py-4 text-xs font-bold text-gray-500">
+                        {formatNaira(prod.costPrice)}
+                      </td>
 
-                    <td className="px-6 py-4 text-xs font-bold text-gray-500">
-                      {formatNaira(item.details?.costPrice || item.costPrice)}
-                    </td>
+                      <td className="px-6 py-4 text-right">
+                        <p className="text-sm font-black text-gray-900">
+                          {formatNaira(prod.sellingPrice)}
+                        </p>
+                      </td>
 
-                    <td className="px-6 py-4 text-right">
-                      <p className="text-sm font-black text-gray-900">
-                        {formatNaira(
-                          item.details?.sellingPrice || item.sellingPrice,
-                        )}
-                      </p>
-                    </td>
+                      <td className="px-6 py-4">
+                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              appDispatch({ type: "openTransferModal" })
+                            }
+                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                            title="Transfer Item"
+                          >
+                            <ArrowRightLeft size={16} />
+                          </button>
 
-                    <td className="px-6 py-4">
-                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                        <button
-                          onClick={() =>
-                            appDispatch({ type: "openTransferModal" })
-                          }
-                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                        >
-                          <ArrowRightLeft size={16} />
-                        </button>
-
-                        {/* UPDATED: Edit Button connected to onEdit prop */}
-                        <button
-                          onClick={() => onEdit(item.details || item)}
-                          className="p-2 text-gray-400 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition"
-                        >
-                          <Edit3 size={16} />
-                        </button>
-                      </div>
-                      <div className="group-hover:hidden flex justify-end">
-                        <MoreHorizontal className="text-gray-300" size={16} />
-                      </div>
-                    </td>
-                  </motion.tr>
-                ))
+                          <button
+                            type="button"
+                            onClick={() => onEdit && onEdit(prod)}
+                            className="p-2 text-gray-400 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition"
+                            title="Edit Product"
+                          >
+                            <Edit3 size={16} />
+                          </button>
+                        </div>
+                        <div className="group-hover:hidden flex justify-end">
+                          <MoreHorizontal className="text-gray-300" size={16} />
+                        </div>
+                      </td>
+                    </motion.tr>
+                  )
+                })
               )}
             </AnimatePresence>
           </tbody>
@@ -239,9 +278,9 @@ export default function ProductTable({ locationId, searchQuery, onEdit }) {
               </span>
             </div>
           ) : !isInitialLoading && products.length === 0 ? (
-            <div className="text-center opacity-20 py-10">
-              <Box size={40} className="mx-auto mb-2" />
-              <p className="text-xs font-bold uppercase tracking-widest">
+            <div className="text-center opacity-40 py-10">
+              <Box size={36} className="mx-auto mb-2 text-gray-400" />
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
                 Node Empty
               </p>
             </div>

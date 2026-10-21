@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect } from "react"
+import React, { useContext, useState, useEffect, useCallback } from "react"
 import {
   Plus,
   Warehouse,
@@ -10,17 +10,18 @@ import {
   Settings2,
   PlusCircle,
   Loader2,
+  RotateCcw,
 } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion"
 import Axios from "axios"
 import ProductTable from "./ProductTable"
 import TransferModal from "./TransferModal"
 import ArrivalModal from "./ArrivalModal"
 import AddProductModal from "./AddProductModal"
 import AddLocationModal from "./AddLocationModal"
+import EditProductModal from "./EditProductModal"
 import StateContext from "../../../StateContext"
 import DispatchContext from "../../../DispatchContext"
-import EditProductModal from "./EditProductModal"
 
 export default function InventoryPage() {
   const appState = useContext(StateContext)
@@ -33,27 +34,31 @@ export default function InventoryPage() {
   const [isLoadingLocs, setIsLoadingLocs] = useState(true)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState(null)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
-  // --- FETCH NODES ---
+  // --- FETCH STORAGE NODES (SCOPED BY STOREID VIA POST) ---
+  const fetchLocations = useCallback(async () => {
+    if (!appState.user?.token) return
+    setIsLoadingLocs(true)
+    try {
+      const response = await Axios.post(
+        `${appState.backendURL}/get-all-locations`,
+        {
+          token: appState.user.token, // Extracted by storeGuard -> req.storeId
+        },
+      )
+      setLocations(Array.isArray(response.data) ? response.data : [])
+    } catch (e) {
+      console.error("Error fetching store locations:", e)
+      setLocations([])
+    } finally {
+      setIsLoadingLocs(false)
+    }
+  }, [appState.backendURL, appState.user?.token])
+
   useEffect(() => {
-    let fetched = true
-    async function getLocations() {
-      try {
-        const response = await Axios.get(
-          `${appState.backendURL}/get-all-locations`,
-        )
-        if (fetched) setLocations(response.data)
-      } catch (e) {
-        console.error("Error fetching locations", e)
-      } finally {
-        if (fetched) setIsLoadingLocs(false)
-      }
-    }
-    getLocations()
-    return () => {
-      fetched = false
-    }
-  }, [appState.backendURL])
+    fetchLocations()
+  }, [fetchLocations])
 
   const activeLoc = locations.find(l => l._id === selectedStore)
 
@@ -62,195 +67,215 @@ export default function InventoryPage() {
     e.preventDefault()
     e.stopPropagation()
     setSelectedStore(locId)
-    setTimeout(() => {
-      appDispatch({ type: "openArrivalModal" })
-    }, 0)
+    appDispatch({ type: "openArrivalModal" })
   }
 
   const handleQuickTransfer = (e, locId) => {
     e.preventDefault()
     e.stopPropagation()
     setSelectedStore(locId)
-    setTimeout(() => {
-      appDispatch({ type: "openTransferModal" })
-    }, 0)
+    appDispatch({ type: "openTransferModal" })
   }
 
-  // Function to open the modal
   const handleEditClick = product => {
-    setSelectedProduct(product) // 1. Defines what data to use
-    setIsEditModalOpen(true) // 2. Defines what action to take
+    setSelectedProduct(product)
+    setIsEditModalOpen(true)
   }
 
-  // Function to refresh list after update
-  const handleUpdateSuccess = () => {
-    fetchInventory() // Re-run your inventory fetch function to show updated data
+  const triggerInventoryRefresh = () => {
+    setRefreshTrigger(prev => prev + 1)
   }
 
   return (
-    <div className="space-y-8 pb-10 font-sans">
+    <div className="space-y-8 pb-10 font-sans antialiased text-gray-900">
       {/* Modals Layer */}
+      {appState.isProductModalOpen && (
+        <AddProductModal
+          isOpen={appState.isProductModalOpen}
+          onClose={() => appDispatch({ type: "closeProductModal" })}
+        />
+      )}
       <AnimatePresence>
         {appState.isTransferModalOpen && (
-          <TransferModal sourceLocation={selectedStore} />
+          <TransferModal
+            sourceLocation={selectedStore}
+            onSuccess={triggerInventoryRefresh}
+          />
         )}
         {appState.isArrivalModalOpen && (
-          <ArrivalModal targetStore={selectedStore} />
+          <ArrivalModal
+            targetStore={selectedStore}
+            onSuccess={triggerInventoryRefresh}
+          />
         )}
-        {appState.isProductModalOpen && <AddProductModal />}
-        {appState.isLocationModalOpen && <AddLocationModal />}
+        {appState.isProductModalOpen && (
+          <AddProductModal onSuccess={triggerInventoryRefresh} />
+        )}
+        {appState.isLocationModalOpen && (
+          <AddLocationModal
+            onSuccess={() => {
+              fetchLocations()
+              triggerInventoryRefresh()
+            }}
+          />
+        )}
         {isEditModalOpen && (
           <EditProductModal
             isOpen={isEditModalOpen}
             onClose={() => setIsEditModalOpen(false)}
             product={selectedProduct}
-            onUpdateSuccess={() => setIsEditModalOpen(false)}
+            onUpdateSuccess={() => {
+              setIsEditModalOpen(false)
+              triggerInventoryRefresh()
+            }}
           />
         )}
       </AnimatePresence>
 
       {/* --- 1. ACTION HEADER --- */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="select-none">
+        <div>
           <h1 className="text-xl font-black text-gray-900 tracking-tight uppercase leading-none">
-            Inventory Control
+            Inventory & Stock Engine
           </h1>
-          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-2 italic">
-            Logic-Based Stock Routing
+          <p className="text-xs text-gray-500 font-medium mt-1.5">
+            {appState.user.businessName || "Store"} • Partitioned Multi-Node
+            Ledger
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* ADD PRODUCT */}
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => appDispatch({ type: "openProductModal" })}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition shadow-md active:scale-95"
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-semibold hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition active:scale-[0.98]"
           >
-            <Plus size={14} strokeWidth={3} /> Add Product
+            <Plus size={15} /> Add Product
           </button>
 
-          {/* TRANSFER BUTTON (Placed next to Add Product) */}
           <button
             onClick={() => appDispatch({ type: "openTransferModal" })}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-indigo-100 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 transition shadow-sm active:scale-95"
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-50 hover:text-indigo-600 transition shadow-sm active:scale-[0.98]"
           >
-            <ArrowRightLeft size={14} strokeWidth={2.5} /> Transfer
+            <ArrowRightLeft size={14} className="text-indigo-600" /> Transfer
           </button>
 
-          {/* NEW NODE */}
           <button
             onClick={() => appDispatch({ type: "openLocationModal" })}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition shadow-sm"
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-50 transition shadow-sm active:scale-[0.98]"
           >
-            <PlusCircle size={14} /> New Node
+            <PlusCircle size={14} className="text-indigo-600" /> Add Node
           </button>
         </div>
       </div>
 
       {/* --- 2. STORAGE NODES GRID --- */}
-      <section className="space-y-4">
+      <section className="space-y-3.5">
         <div className="flex justify-between items-center px-1">
           <div className="flex items-center gap-2">
-            <Settings2 size={14} className="text-indigo-600" />
-            <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-              Storage Nodes
+            <Settings2 size={15} className="text-indigo-600" />
+            <h2 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+              Storage Branches & Nodes
             </h2>
           </div>
           <button
             onClick={() => setSelectedStore(null)}
-            className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase transition-all flex items-center gap-2 ${!selectedStore ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" : "bg-gray-100 text-gray-400 hover:bg-gray-200"}`}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              !selectedStore
+                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
+                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+            }`}
           >
-            <Globe size={12} /> Global View
+            <Globe size={13} /> Global View
           </button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {isLoadingLocs ? (
-            <div className="col-span-full py-20 flex justify-center">
-              <Loader2 className="animate-spin text-gray-200" size={32} />
+            <div className="col-span-full py-12 flex flex-col items-center justify-center gap-2 bg-white rounded-2xl border border-gray-100 shadow-sm">
+              <Loader2 className="animate-spin text-indigo-600" size={24} />
+              <span className="text-xs text-gray-400 font-medium">
+                Loading store nodes...
+              </span>
             </div>
           ) : (
             <>
               {locations.map(loc => (
-                <motion.div
-                  layout
-                  whileHover={{ y: -4 }}
+                <div
                   key={loc._id}
                   onClick={() => setSelectedStore(loc._id)}
-                  className={`p-5 rounded-[1.5rem] border cursor-pointer transition-all duration-300 relative group ${
+                  className={`p-5 rounded-2xl border cursor-pointer transition-all relative group ${
                     selectedStore === loc._id
-                      ? "border-indigo-500 bg-white shadow-xl shadow-indigo-500/10 ring-1 ring-indigo-500"
-                      : "border-gray-100 bg-white hover:border-indigo-200 shadow-sm"
+                      ? "border-indigo-600 bg-white shadow-lg shadow-indigo-600/10 ring-2 ring-indigo-600/20"
+                      : "border-gray-200/80 bg-white hover:border-indigo-200 shadow-sm"
                   }`}
                 >
-                  {/* FLOATING QUICK ACTIONS */}
-                  <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all z-[30]">
+                  {/* Floating Node Actions */}
+                  <div className="absolute top-4 right-4 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-10">
                     <button
                       type="button"
                       onClick={e => handleQuickTransfer(e, loc._id)}
-                      className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-600 hover:text-white shadow-sm transition-colors"
-                      title="Transfer Stock"
+                      className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-600 hover:text-white transition-colors"
+                      title="Transfer from this location"
                     >
-                      <ArrowRightLeft size={16} strokeWidth={2.5} />
+                      <ArrowRightLeft size={13} />
                     </button>
                     <button
                       type="button"
                       onClick={e => handleQuickArrival(e, loc._id)}
-                      className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white shadow-sm transition-colors"
-                      title="Quick Arrival"
+                      className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-colors"
+                      title="Receive stock here"
                     >
-                      <Plus size={16} strokeWidth={3} />
+                      <Plus size={13} />
                     </button>
                   </div>
 
-                  <div className="flex justify-between items-start mb-4">
+                  <div className="flex justify-between items-start mb-3">
                     <div
-                      className={`p-3 rounded-2xl transition-colors ${selectedStore === loc._id ? "bg-indigo-600 text-white" : "bg-gray-50 text-gray-400 group-hover:bg-indigo-50 group-hover:text-indigo-600"}`}
+                      className={`p-2.5 rounded-xl ${
+                        selectedStore === loc._id
+                          ? "bg-indigo-600 text-white"
+                          : "bg-indigo-50 text-indigo-600"
+                      }`}
                     >
                       {loc.type === "Warehouse" ? (
-                        <Warehouse size={20} />
+                        <Warehouse size={18} />
                       ) : (
-                        <Store size={20} />
+                        <Store size={18} />
                       )}
                     </div>
                     <span
-                      className={`text-[8px] font-black uppercase px-2 py-1 rounded-md mr-16 ${loc.type === "Warehouse" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}
+                      className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                        loc.type === "Warehouse"
+                          ? "bg-amber-50 text-amber-700 border border-amber-200/60"
+                          : "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                      }`}
                     >
-                      {loc.code}
+                      {loc.code || "Branch"}
                     </span>
                   </div>
 
-                  <h3 className="font-bold text-gray-800 text-sm leading-tight mb-4">
+                  <h3 className="font-bold text-gray-900 text-sm leading-tight mb-2">
                     {loc.name}
                   </h3>
 
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[9px] font-black uppercase tracking-widest">
-                      <span className="text-gray-400">Load Factor</span>
-                      <span className="text-gray-700">
-                        {loc.capacity || "0%"}
-                      </span>
-                    </div>
-                    <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: loc.capacity || "0%" }}
-                        className={`h-full ${parseInt(loc.capacity) > 80 ? "bg-red-500" : "bg-indigo-500"}`}
-                      />
-                    </div>
+                  <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
+                    <span>Terminal Mode</span>
+                    <span className="font-semibold text-gray-700">
+                      {loc.type || "Retail"}
+                    </span>
                   </div>
-                </motion.div>
+                </div>
               ))}
 
               <button
                 onClick={() => appDispatch({ type: "openLocationModal" })}
-                className="p-5 rounded-[1.5rem] border-2 border-dashed border-gray-200 bg-gray-50/50 hover:bg-white hover:border-indigo-400 transition-all flex flex-col items-center justify-center gap-3 group"
+                className="p-5 rounded-2xl border-2 border-dashed border-gray-200 hover:border-indigo-400 bg-gray-50/50 hover:bg-indigo-50/20 transition flex flex-col items-center justify-center gap-2 group min-h-[130px]"
               >
-                <div className="p-3 bg-white rounded-full text-gray-300 group-hover:text-indigo-600 transition-colors shadow-sm">
-                  <PlusCircle size={24} strokeWidth={2.5} />
+                <div className="p-2.5 bg-white rounded-xl text-gray-400 group-hover:text-indigo-600 group-hover:scale-110 transition shadow-sm border border-gray-100">
+                  <PlusCircle size={18} />
                 </div>
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                  Add New Node
+                <p className="text-xs font-semibold text-gray-600 group-hover:text-indigo-600">
+                  Register New Node
                 </p>
               </button>
             </>
@@ -258,39 +283,52 @@ export default function InventoryPage() {
         </div>
       </section>
 
-      {/* --- 3. DYNAMIC PRODUCT TABLE --- */}
-      <section className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden flex flex-col min-h-[600px]">
-        <div className="p-6 border-b border-gray-50 bg-gray-50/10 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-4">
+      {/* --- 3. PRODUCT TABLE WORKSPACE --- */}
+      <section className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
+        <div className="p-5 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-3">
             <div
-              className={`p-3 rounded-2xl ${selectedStore ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" : "bg-white text-indigo-600 border border-gray-100"}`}
+              className={`p-2.5 rounded-xl ${
+                selectedStore
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "bg-indigo-50 text-indigo-600"
+              }`}
             >
-              <Package size={20} />
+              <Package size={18} />
             </div>
             <div>
-              <h3 className="font-black text-sm text-gray-800 uppercase tracking-tight leading-none">
-                {activeLoc ? activeLoc.name : "Consolidated Inventory"}
+              <h3 className="font-bold text-sm text-gray-900 leading-none">
+                {activeLoc ? activeLoc.name : "Consolidated Stock Master"}
               </h3>
-              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none mt-2">
+              <p className="text-xs text-gray-400 font-medium mt-1">
                 {activeLoc
-                  ? `Live data for ${activeLoc.code}`
-                  : "Viewing all items across nodes"}
+                  ? `Filtered view for node code ${activeLoc.code}`
+                  : "Displaying all inventoried assets across all branches"}
               </p>
             </div>
           </div>
 
-          <div className="relative w-full md:w-80">
-            <Search
-              className="absolute left-4 top-3.5 text-gray-400"
-              size={16}
-            />
-            <input
-              type="text"
-              placeholder="Filter current view..."
-              className="w-full pl-11 pr-4 py-3.5 bg-white border border-gray-200 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all shadow-sm"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
+          <div className="flex items-center gap-2.5 w-full md:w-auto">
+            <div className="relative w-full md:w-72">
+              <Search
+                className="absolute left-3.5 top-3 text-gray-400 pointer-events-none"
+                size={15}
+              />
+              <input
+                type="text"
+                placeholder="Search stock by SKU or name..."
+                className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 outline-none transition"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <button
+              onClick={triggerInventoryRefresh}
+              className="p-2 border border-gray-200 rounded-xl text-gray-400 hover:text-indigo-600 hover:bg-gray-50 transition"
+              title="Refresh ledger"
+            >
+              <RotateCcw size={15} />
+            </button>
           </div>
         </div>
 
@@ -298,6 +336,7 @@ export default function InventoryPage() {
           locationId={selectedStore}
           searchQuery={searchQuery}
           onEdit={handleEditClick}
+          refreshSignal={refreshTrigger}
         />
       </section>
     </div>

@@ -1,6 +1,14 @@
-import React, { useContext, useState, useEffect } from "react"
+import React, { useContext, useState, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Phone, Mail, User, Banknote, ArrowRight, Calendar } from "lucide-react"
+import {
+  Phone,
+  User,
+  Banknote,
+  ArrowRight,
+  Calendar,
+  Loader2,
+  AlertCircle,
+} from "lucide-react"
 import CustomerProfile from "./CustomerProfile"
 import PostPaymentModal from "./PosPaymentModal"
 import StateContext from "../../../StateContext"
@@ -11,6 +19,8 @@ import Axios from "axios"
 export default function CustomerTable({
   searchQuery = "",
   showOnlyDebtors = false,
+  refreshSignal = 0,
+  onDataChange,
 }) {
   const appState = useContext(StateContext)
   const appDispatch = useContext(DispatchContext)
@@ -19,37 +29,55 @@ export default function CustomerTable({
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [isPaymentOpen, setIsPaymentOpen] = useState(false)
   const [isFetching, setIsFetching] = useState(false)
+  const [localCustomers, setLocalCustomers] = useState([])
 
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
+    const token = appState.user?.token || localStorage.getItem("token")
+    if (!token) return
+
     setIsFetching(true)
     try {
-      const response = await Axios.get(
+      // POST with token to satisfy storeGuard
+      const response = await Axios.post(
         `${appState.backendURL}/get-all-customers`,
+        { token },
       )
-      console.log(response.data)
-      appDispatch({ type: "setCustomers", payload: response.data })
+
+      const customerList = Array.isArray(response.data) ? response.data : []
+      setLocalCustomers(customerList)
+      appDispatch({ type: "setCustomers", payload: customerList })
     } catch (err) {
+      console.error("Failed to load customer records:", err)
       appDispatch({
         type: "addFlashMessage",
-        payload: { type: "error", msg: "Failed to sync ledger data" },
+        payload: { type: "error", msg: "Failed to sync customer ledger data." },
       })
     } finally {
       setIsFetching(false)
     }
-  }
+  }, [appState.backendURL, appState.user?.token, appDispatch])
 
   useEffect(() => {
     fetchCustomers()
-  }, [])
+  }, [fetchCustomers, refreshSignal])
 
-  const filteredCustomers = (appState.customers || [])?.filter(customer => {
+  const sourceData =
+    localCustomers.length > 0 ? localCustomers : appState.customers || []
+
+  // Robust field normalization across both name and credit fields
+  const filteredCustomers = sourceData.filter(customer => {
+    const customerName = (
+      customer.name ||
+      customer.fullName ||
+      ""
+    ).toLowerCase()
+    const customerPhone = customer.phone || ""
+    const query = searchQuery.trim().toLowerCase()
+
     const matchesSearch =
-      (customer.fullName || "")
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase()) ||
-      (customer.phone || "").includes(searchQuery)
-
-    const matchesDebtFilter = showOnlyDebtors ? customer.debt > 0 : true
+      !query || customerName.includes(query) || customerPhone.includes(query)
+    const currentDebt = parseFloat(customer.creditBalance ?? customer.debt ?? 0)
+    const matchesDebtFilter = showOnlyDebtors ? currentDebt > 0 : true
 
     return matchesSearch && matchesDebtFilter
   })
@@ -63,6 +91,13 @@ export default function CustomerTable({
     e.stopPropagation()
     setSelectedCustomer(customer)
     setIsPaymentOpen(true)
+  }
+
+  const handlePostPaymentSuccess = () => {
+    fetchCustomers()
+    if (typeof onDataChange === "function") {
+      onDataChange()
+    }
   }
 
   return (
@@ -88,144 +123,160 @@ export default function CustomerTable({
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-gray-50 text-xs">
             <AnimatePresence mode="popLayout">
               {filteredCustomers.length > 0 ? (
-                filteredCustomers.map((customer, index) => (
-                  <motion.tr
-                    layout
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ delay: index * 0.02 }}
-                    key={customer._id}
-                    onClick={() => openProfile(customer)}
-                    className="group hover:bg-indigo-50/40 cursor-pointer transition-all duration-200"
-                  >
-                    {/* 1. IDENTITY COLUMN - Names focus */}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-2xl bg-gray-50 text-gray-400 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300 flex items-center justify-center border border-gray-100">
-                          <User size={18} />
-                        </div>
-                        <div>
-                          <p className="text-sm font-black text-gray-800 leading-none">
-                            {customer.name}
-                          </p>
-                          <div className="flex items-center gap-1 mt-2 text-gray-400">
-                            <Calendar size={10} />
-                            <p className="text-[9px] font-bold uppercase tracking-tighter italic">
-                              Member since{" "}
-                              {customer.registeredAt
-                                ? new Date(
-                                    customer.registeredAt,
-                                  ).toLocaleDateString("en-GB", {
-                                    month: "short",
-                                    year: "numeric",
-                                  })
-                                : "Recent"}
+                filteredCustomers.map((customer, index) => {
+                  const debt = parseFloat(
+                    customer.creditBalance ?? customer.debt ?? 0,
+                  )
+                  const limit = parseFloat(customer.creditLimit || 50000)
+                  const usagePercent = Math.min(
+                    (debt / (limit || 1)) * 100,
+                    100,
+                  )
+                  const isOverLimit = limit > 0 && debt > limit
+                  const displayName =
+                    customer.name || customer.fullName || "Account Client"
+
+                  return (
+                    <motion.tr
+                      layout
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.98 }}
+                      transition={{ delay: index * 0.015 }}
+                      key={customer._id}
+                      onClick={() => openProfile(customer)}
+                      className="group hover:bg-indigo-50/40 cursor-pointer transition-colors"
+                    >
+                      {/* 1. Identity */}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3.5">
+                          <div className="w-9 h-9 rounded-xl bg-gray-50 text-gray-400 group-hover:bg-indigo-600 group-hover:text-white transition-all flex items-center justify-center border border-gray-100 shadow-sm shrink-0">
+                            <User size={16} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-gray-900 leading-none">
+                              {displayName}
                             </p>
+                            <div className="flex items-center gap-1.5 mt-1.5 text-gray-400 text-[10px] font-medium">
+                              <Calendar size={11} />
+                              <span>
+                                {customer.createdAt || customer.registeredAt
+                                  ? new Date(
+                                      customer.createdAt ||
+                                        customer.registeredAt,
+                                    ).toLocaleDateString([], {
+                                      month: "short",
+                                      year: "numeric",
+                                    })
+                                  : "Verified"}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* 2. CONTACT */}
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2 text-xs font-bold text-gray-600">
-                          <Phone size={12} className="text-indigo-400" />{" "}
-                          {customer.phone}
-                        </div>
-                        <p className="text-[9px] text-gray-400 font-medium truncate max-w-[150px]">
-                          {customer.address || "Address not provided"}
-                        </p>
-                      </div>
-                    </td>
-
-                    {/* 3. CREDIT METER */}
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col items-center max-w-[100px] mx-auto">
-                        <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden mb-2">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{
-                              width: `${Math.min(
-                                ((customer.creditBalance || 0) /
-                                  (customer.creditLimit || 50000)) *
-                                  100,
-                                100,
-                              )}%`,
-                            }}
-                            className={`h-full ${
-                              customer.creditBalance >
-                              (customer.creditLimit || 50000)
-                                ? "bg-red-500 animate-pulse"
-                                : "bg-indigo-500"
-                            }`}
-                          />
-                        </div>
-                        <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">
-                          Limit: {formatNaira(customer.creditLimit || 0)}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* 4. TOTAL SPENT */}
-                    <td className="px-6 py-4 text-center">
-                      <p className="text-sm font-black text-gray-900">
-                        {formatNaira(customer.totalSpent || 0)}
-                      </p>
-                      <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter mt-1">
-                        LTV Volume
-                      </p>
-                    </td>
-
-                    {/* 5. DEBT & ACTION */}
-                    <td className="px-6 py-4">
-                      <div className="flex justify-end items-center gap-3">
-                        <div className="text-right">
-                          <p
-                            className={`text-sm font-black ${
-                              customer.creditBalance > 0
-                                ? "text-rose-600"
-                                : "text-emerald-600"
-                            }`}
-                          >
-                            {formatNaira(customer.creditBalance || 0)}
+                      {/* 2. Contact Details */}
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5 font-semibold text-gray-700">
+                            <Phone size={11} className="text-indigo-500" />
+                            <span>{customer.phone || "No phone"}</span>
+                          </div>
+                          <p className="text-[10px] text-gray-400 truncate max-w-[170px]">
+                            {customer.address || "No address assigned"}
                           </p>
                         </div>
+                      </td>
 
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                          {customer.creditBalance > 0 && (
-                            <button
-                              onClick={e => openPayment(e, customer)}
-                              className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white shadow-sm transition-all"
-                            >
-                              <Banknote size={16} />
-                            </button>
-                          )}
-                          <button className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-600 hover:text-white shadow-sm transition-all">
-                            <ArrowRight size={16} />
-                          </button>
+                      {/* 3. Credit Meter */}
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col items-center max-w-[120px] mx-auto">
+                          <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1.5">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${usagePercent}%` }}
+                              className={`h-full ${
+                                isOverLimit
+                                  ? "bg-rose-500 animate-pulse"
+                                  : "bg-indigo-600"
+                              }`}
+                            />
+                          </div>
+                          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">
+                            Limit: {formatNaira(limit)}
+                          </span>
                         </div>
-                      </div>
-                    </td>
-                  </motion.tr>
-                ))
+                      </td>
+
+                      {/* 4. Lifetime Volume */}
+                      <td className="px-6 py-4 text-center">
+                        <p className="text-xs font-bold text-gray-900">
+                          {formatNaira(customer.totalSpent || 0)}
+                        </p>
+                        <p className="text-[9px] text-gray-400 font-medium uppercase tracking-tight mt-0.5">
+                          {customer.visitCount || 0} Orders
+                        </p>
+                      </td>
+
+                      {/* 5. Balance Owed & Action Buttons */}
+                      <td className="px-6 py-4">
+                        <div className="flex justify-end items-center gap-3">
+                          <div className="text-right">
+                            <span
+                              className={`text-xs font-black ${
+                                debt > 0 ? "text-rose-600" : "text-emerald-600"
+                              }`}
+                            >
+                              {formatNaira(debt)}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {debt > 0 && (
+                              <button
+                                type="button"
+                                onClick={e => openPayment(e, customer)}
+                                title="Record Debt Settlement"
+                                className="p-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg transition shadow-sm"
+                              >
+                                <Banknote size={15} />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => openProfile(customer)}
+                              className="p-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-lg transition shadow-sm"
+                              title="View Account Profile"
+                            >
+                              <ArrowRight size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  )
+                })
               ) : isFetching ? (
                 <tr>
                   <td colSpan="5" className="py-20 text-center">
-                    <div className="inline-block w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                    <div className="flex flex-col items-center justify-center gap-2 text-indigo-600">
+                      <Loader2 className="animate-spin" size={24} />
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        Synchronizing Accounts...
+                      </span>
+                    </div>
                   </td>
                 </tr>
               ) : (
                 <tr>
                   <td
                     colSpan="5"
-                    className="py-20 text-center text-gray-400 italic text-sm font-bold uppercase tracking-widest"
+                    className="py-20 text-center text-gray-400 text-xs font-semibold uppercase tracking-wider"
                   >
-                    No Ledger entries found
+                    No customer accounts matched your criteria
                   </td>
                 </tr>
               )}
@@ -238,13 +289,14 @@ export default function CustomerTable({
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
         customer={selectedCustomer}
+        onUpdate={fetchCustomers}
       />
 
       {isPaymentOpen && (
         <PostPaymentModal
           customer={selectedCustomer}
           onClose={() => setIsPaymentOpen(false)}
-          onRefresh={fetchCustomers}
+          onRefresh={handlePostPaymentSuccess}
         />
       )}
     </div>

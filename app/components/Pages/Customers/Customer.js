@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react"
+import React, { useContext, useEffect, useState, useCallback } from "react"
 import {
   Users,
   UserPlus,
@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   Wallet,
   Activity,
+  RefreshCw,
 } from "lucide-react"
 import Axios from "axios"
 import CustomerTable from "./CustomerTable"
@@ -20,8 +21,10 @@ export default function CustomerPage() {
   const appDispatch = useContext(DispatchContext)
 
   const [searchQuery, setSearchQuery] = useState("")
-  const [showOnlyDebtors, setShowOnlyDebtors] = useState(false) // NEW: Debt Filter State
+  const [showOnlyDebtors, setShowOnlyDebtors] = useState(false)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [refreshSignal, setRefreshSignal] = useState(0)
+
   const [summary, setSummary] = useState({
     totalCount: 0,
     totalDebt: 0,
@@ -29,19 +32,36 @@ export default function CustomerPage() {
     overLimitCount: 0,
   })
 
-  useEffect(() => {
-    async function fetchCustomerStats() {
-      try {
-        const response = await Axios.get(
-          `${appState.backendURL}/get-customer-stats`,
-        )
-        setSummary(response.data)
-      } catch (e) {
-        console.error("Failed to fetch customer telemetry")
+  const fetchCustomerStats = useCallback(async () => {
+    const token = appState.user?.token || localStorage.getItem("token")
+    if (!token) return
+
+    try {
+      // POST with token to pass storeGuard
+      const response = await Axios.post(
+        `${appState.backendURL}/get-customer-stats`,
+        { token },
+      )
+      if (response.data) {
+        setSummary({
+          totalCount: Number(response.data.totalCount) || 0,
+          totalDebt: Number(response.data.totalDebt) || 0,
+          activeThisMonth: Number(response.data.activeThisMonth) || 0,
+          overLimitCount: Number(response.data.overLimitCount) || 0,
+        })
       }
+    } catch (e) {
+      console.error("Failed to fetch customer telemetry:", e)
     }
+  }, [appState.backendURL, appState.user?.token])
+
+  useEffect(() => {
     fetchCustomerStats()
-  }, [appState.backendURL])
+  }, [fetchCustomerStats, refreshSignal])
+
+  const handleRefresh = () => {
+    setRefreshSignal(prev => prev + 1)
+  }
 
   const formatNaira = amt =>
     new Intl.NumberFormat("en-NG", {
@@ -51,72 +71,82 @@ export default function CustomerPage() {
     }).format(amt || 0)
 
   return (
-    <div className="space-y-8 pb-10 font-sans">
+    <div className="space-y-8 pb-10 font-sans text-gray-900">
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-gray-900 tracking-tighter uppercase leading-none">
             Customer Ledger
           </h1>
-          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-2 italic">
+          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-2">
             Credit Management & Risk Assessment
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition shadow-lg active:scale-95"
+            type="button"
+            onClick={handleRefresh}
+            className="p-2.5 text-gray-400 hover:text-gray-700 bg-white border border-gray-200 rounded-xl transition shadow-sm"
+            title="Refresh Ledger"
           >
-            <UserPlus size={16} />
+            <RefreshCw size={15} />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition shadow-md shadow-indigo-600/20 active:scale-95"
+          >
+            <UserPlus size={15} />
             Onboard Account
           </button>
         </div>
       </div>
 
       {/* KPI RIBBON */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Total Accounts"
           value={summary.totalCount.toLocaleString()}
-          icon={<Users size={20} />}
+          icon={<Users size={18} />}
           color="indigo"
         />
         <StatCard
-          label="Market Debt"
+          label="Total Market Debt"
           value={formatNaira(summary.totalDebt)}
-          icon={<Wallet size={20} />}
+          icon={<Wallet size={18} />}
           color="blue"
         />
         <StatCard
-          label="Monthly Growth"
-          value={`+${summary.activeThisMonth}`}
-          icon={<TrendingUp size={20} />}
+          label="Active Accounts"
+          value={summary.activeThisMonth.toLocaleString()}
+          icon={<TrendingUp size={18} />}
           color="emerald"
         />
         <StatCard
-          label="High Risk"
+          label="Credit Over-Limit"
           value={summary.overLimitCount}
-          icon={<AlertTriangle size={20} />}
+          icon={<AlertTriangle size={18} />}
           color={summary.overLimitCount > 0 ? "red" : "gray"}
           isAlert={summary.overLimitCount > 0}
         />
       </div>
 
       {/* MAIN TABLE CONTAINER */}
-      <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden flex flex-col min-h-[600px]">
+      <div className="bg-white rounded-3xl border border-gray-200/80 shadow-sm overflow-hidden flex flex-col min-h-[550px]">
         {/* Table Toolbar */}
-        <div className="p-6 border-b border-gray-50 flex flex-col md:flex-row gap-4 justify-between bg-gray-50/10">
-          <div className="flex flex-col md:flex-row gap-4 flex-1">
-            <div className="relative w-full md:w-80">
+        <div className="p-5 border-b border-gray-100 flex flex-col md:flex-row gap-3 justify-between bg-slate-50/50">
+          <div className="flex flex-col sm:flex-row gap-3 flex-1">
+            <div className="relative w-full sm:w-80">
               <Search
-                className="absolute left-4 top-3.5 text-gray-400"
-                size={18}
+                className="absolute left-3.5 top-3.5 text-gray-400 pointer-events-none"
+                size={16}
               />
               <input
                 type="text"
-                placeholder="Filter by name or phone..."
-                className="w-full pl-12 pr-4 py-3.5 bg-white border border-gray-200 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all shadow-sm"
+                placeholder="Filter by name, phone, or code..."
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:border-indigo-500 outline-none transition shadow-sm placeholder:text-gray-400"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
               />
@@ -124,39 +154,39 @@ export default function CustomerPage() {
 
             {/* DEBT FILTER TOGGLE */}
             <button
-              onClick={() => setShowOnlyDebtors(!showOnlyDebtors)}
-              className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+              type="button"
+              onClick={() => setShowOnlyDebtors(prev => !prev)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition border ${
                 showOnlyDebtors
-                  ? "bg-rose-600 text-white border-rose-600 shadow-lg shadow-rose-100"
-                  : "bg-white text-gray-500 border-gray-100 hover:bg-gray-50"
+                  ? "bg-rose-600 text-white border-rose-600 shadow-sm shadow-rose-200"
+                  : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
               }`}
             >
-              <Activity size={14} />
+              <Activity size={13} />
               {showOnlyDebtors ? "Viewing Debtors Only" : "Filter Debtors"}
             </button>
           </div>
 
           {summary.overLimitCount > 0 && (
             <div
-              className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl border border-red-100 animate-pulse cursor-pointer"
+              className="flex items-center gap-2 px-3 py-1.5 bg-rose-50 text-rose-700 rounded-xl border border-rose-200 text-[10px] font-bold uppercase tracking-wider cursor-pointer self-start md:self-auto"
               onClick={() => {
                 setSearchQuery("")
                 setShowOnlyDebtors(true)
               }}
             >
-              <AlertTriangle size={14} />
-              <span className="text-[9px] font-black uppercase tracking-widest">
-                {summary.overLimitCount} Critical Violations
-              </span>
+              <AlertTriangle size={14} className="text-rose-600" />
+              <span>{summary.overLimitCount} Over Credit Limit</span>
             </div>
           )}
         </div>
 
         <div className="flex-1">
-          {/* We pass showOnlyDebtors to the Table */}
           <CustomerTable
             searchQuery={searchQuery}
             showOnlyDebtors={showOnlyDebtors}
+            refreshSignal={refreshSignal}
+            onDataChange={handleRefresh}
           />
         </div>
       </div>
@@ -164,6 +194,7 @@ export default function CustomerPage() {
       <AddCustomerModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
+        onSuccess={handleRefresh}
       />
     </div>
   )
@@ -171,27 +202,30 @@ export default function CustomerPage() {
 
 function StatCard({ label, value, icon, color, isAlert }) {
   const themes = {
-    indigo: "bg-indigo-600 text-white",
-    blue: "bg-blue-600 text-white",
-    emerald: "bg-emerald-600 text-white",
-    red: "bg-red-600 text-white shadow-red-200",
-    gray: "bg-gray-100 text-gray-400",
+    indigo: "bg-indigo-50 text-indigo-600 border border-indigo-100",
+    blue: "bg-blue-50 text-blue-600 border border-blue-100",
+    emerald: "bg-emerald-50 text-emerald-600 border border-emerald-100",
+    red: "bg-rose-50 text-rose-600 border border-rose-100",
+    gray: "bg-gray-100 text-gray-400 border border-gray-200",
   }
+
   return (
     <div
-      className={`bg-white p-6 rounded-[2rem] border transition-all flex items-center gap-5 ${isAlert ? "border-red-200 ring-4 ring-red-50" : "border-gray-100 shadow-sm"}`}
+      className={`bg-white p-5 rounded-2xl border transition-all flex items-center gap-4 ${
+        isAlert
+          ? "border-rose-300 ring-2 ring-rose-100"
+          : "border-gray-200/80 shadow-sm"
+      }`}
     >
-      <div
-        className={`p-4 rounded-2xl ${themes[color]} shadow-lg ${isAlert ? "animate-bounce" : ""}`}
-      >
-        {icon}
-      </div>
+      <div className={`p-3 rounded-xl shrink-0 ${themes[color]}`}>{icon}</div>
       <div>
-        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
           {label}
         </p>
         <p
-          className={`text-xl font-black mt-1 ${color === "red" ? "text-red-600" : "text-gray-900"}`}
+          className={`text-lg font-black mt-0.5 ${
+            color === "red" ? "text-rose-600" : "text-gray-900"
+          }`}
         >
           {value}
         </p>

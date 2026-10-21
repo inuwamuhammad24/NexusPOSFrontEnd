@@ -15,80 +15,136 @@ import Axios from "axios"
 import StateContext from "../../../StateContext"
 import DispatchContext from "../../../DispatchContext"
 
-export default function AddStaffModal({ isOpen, onClose, onSave }) {
+const INITIAL_FORM = {
+  name: "",
+  email: "",
+  role: "Cashier",
+  password: "",
+  locationId: "",
+}
+
+export default function AddStaffModal({ isOpen, onClose, onSave, onSuccess }) {
   const appState = useContext(StateContext)
   const appDispatch = useContext(DispatchContext)
 
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    role: "Cashier",
-    password: "",
-    locationId: "", // New field
-  })
-
+  const [formData, setFormData] = useState(INITIAL_FORM)
   const [locations, setLocations] = useState([])
   const [isLoadingLocs, setIsLoadingLocs] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
   const roles = [
-    { id: "Admin", desc: "Full system access & reports" },
-    { id: "Manager", desc: "Inventory & sales management" },
-    { id: "Cashier", desc: "POS & customer operations" },
-    { id: "Storekeeper", desc: "Warehouse & bulk stock" },
+    { id: "Admin", desc: "Full administrative & platform controls" },
+    { id: "Manager", desc: "Inventory & operational supervisor" },
+    { id: "Cashier", desc: "POS checkout & sales terminals" },
+    { id: "Storekeeper", desc: "Warehouse stock inflow & transfers" },
   ]
 
-  // --- FETCH LOCATIONS ---
+  // Reset form and close
+  const resetAndClose = () => {
+    setFormData(INITIAL_FORM)
+    setIsSaving(false)
+    onClose()
+  }
+
+  // --- FETCH LOCATIONS (TOKEN GUARDED) ---
   useEffect(() => {
-    if (isOpen) {
-      async function fetchLocs() {
-        setIsLoadingLocs(true)
-        try {
-          const response = await Axios.get(
-            `${appState.backendURL}/get-all-locations`,
-          )
-          setLocations(response.data)
-        } catch (e) {
+    if (!isOpen) return
+
+    const source = Axios.CancelToken.source()
+
+    async function fetchLocs() {
+      const token = appState.user?.token || localStorage.getItem("token")
+      if (!token) return
+
+      setIsLoadingLocs(true)
+      try {
+        const response = await Axios.post(
+          `${appState.backendURL}/get-all-locations`,
+          { token },
+          { cancelToken: source.token },
+        )
+        setLocations(Array.isArray(response.data) ? response.data : [])
+      } catch (e) {
+        if (!Axios.isCancel(e)) {
+          console.error("Failed to load store locations:", e)
           appDispatch({
             type: "addFlashMessage",
             payload: {
               type: "error",
-              msg: "Fail to load locations, try again later",
+              msg: "Failed to load branch storage nodes.",
             },
           })
-        } finally {
-          setIsLoadingLocs(false)
         }
+      } finally {
+        setIsLoadingLocs(false)
       }
-      fetchLocs()
     }
-  }, [isOpen, appState.backendURL])
+
+    fetchLocs()
+    return () => source.cancel()
+  }, [isOpen, appState.backendURL, appState.user?.token, appDispatch])
 
   if (!isOpen) return null
 
   const handleSubmit = async e => {
     e.preventDefault()
+
+    const token = appState.user?.token || localStorage.getItem("token")
+    if (!token) {
+      appDispatch({
+        type: "addFlashMessage",
+        payload: {
+          type: "error",
+          msg: "Session expired. Please sign in again.",
+        },
+      })
+      return
+    }
+
     setIsSaving(true)
-    // Pass formData back to the parent component for the actual API call
+
     try {
+      const payload = {
+        token, // Required for storeGuard -> req.storeId
+        name: formData.name.trim(),
+        username: formData.name.trim(),
+        fullName: formData.name.trim(),
+        email: formData.email.trim().toLowerCase(),
+        role: formData.role,
+        password: formData.password,
+        locationId: formData.locationId || "global",
+      }
+
       const response = await Axios.post(
         `${appState.backendURL}/add-staff`,
-        formData,
+        payload,
       )
+
       if (response.data) {
-        onClose()
         appDispatch({
           type: "addFlashMessage",
           payload: {
-            type: "sucess",
-            msg: "New Staff created successfully",
+            type: "success",
+            msg: `Team member "${formData.name}" added successfully!`,
           },
         })
+
+        // Notify parent StaffPage / Table to refresh roster & pulse
+        if (typeof onSuccess === "function") {
+          onSuccess(response.data)
+        } else if (typeof onSave === "function") {
+          onSave(response.data)
+        }
+
+        resetAndClose()
       }
     } catch (error) {
-      console.log(error)
+      console.error("Staff creation error:", error)
       const serverMessage =
-        error.response?.data?.msg || "An unexpected error occurred."
+        error.response?.data?.msg ||
+        error.response?.data?.error ||
+        "An unexpected error occurred while adding staff."
+
       appDispatch({
         type: "addFlashMessage",
         payload: {
@@ -96,70 +152,73 @@ export default function AddStaffModal({ isOpen, onClose, onSave }) {
           msg: serverMessage,
         },
       })
+    } finally {
+      setIsSaving(false)
     }
-    setIsSaving(false)
   }
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm antialiased">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="absolute inset-0"
-          onClick={onClose}
+          onClick={resetAndClose}
         />
 
         <motion.div
           initial={{ opacity: 0, scale: 0.98, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.98, y: 10 }}
-          className="relative bg-white w-full max-w-lg rounded-2xl shadow-xl overflow-hidden flex flex-col"
+          className="relative bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-gray-100 z-10"
         >
           {/* Header */}
-          <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+          <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-slate-50/60">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-600 text-white rounded-lg shadow-sm">
-                <Shield size={20} />
+              <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-sm">
+                <Shield size={18} />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-800 tracking-tight">
+                <h2 className="text-sm font-bold text-gray-900 tracking-tight uppercase">
                   Add Team Member
                 </h2>
-                <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wider">
-                  Access & Permissions
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">
+                  Access Provisioning & Role Privileges
                 </p>
               </div>
             </div>
             <button
-              onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600 transition"
+              type="button"
+              onClick={resetAndClose}
+              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"
             >
-              <X size={18} />
+              <X size={16} />
             </button>
           </div>
 
           <form
             onSubmit={handleSubmit}
-            className="p-6 space-y-5 max-h-[80vh] overflow-y-auto custom-scrollbar"
+            className="p-6 space-y-4 max-h-[80vh] overflow-y-auto scrollbar-thin"
           >
             {/* Name & Email Group */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-2 block ml-1">
-                  Full Name
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">
+                  Full Name <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <User
-                    className="absolute left-4 top-3 text-gray-400"
-                    size={16}
+                    className="absolute left-3.5 top-3 text-gray-400 pointer-events-none"
+                    size={15}
                   />
                   <input
                     required
                     type="text"
-                    placeholder="John Doe"
-                    className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:border-indigo-500 outline-none transition-all"
+                    placeholder="e.g. Maryam Bello"
+                    value={formData.name}
+                    className="w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
                     onChange={e =>
                       setFormData({ ...formData, name: e.target.value })
                     }
@@ -167,19 +226,20 @@ export default function AddStaffModal({ isOpen, onClose, onSave }) {
                 </div>
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-2 block ml-1">
-                  Email
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">
+                  Email Address <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <Mail
-                    className="absolute left-4 top-3 text-gray-400"
-                    size={16}
+                    className="absolute left-3.5 top-3 text-gray-400 pointer-events-none"
+                    size={15}
                   />
                   <input
                     required
                     type="email"
-                    placeholder="john@store.com"
-                    className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:border-indigo-500 outline-none transition-all"
+                    placeholder="staff@store.com"
+                    value={formData.email}
+                    className="w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
                     onChange={e =>
                       setFormData({ ...formData, email: e.target.value })
                     }
@@ -188,19 +248,19 @@ export default function AddStaffModal({ isOpen, onClose, onSave }) {
               </div>
             </div>
 
-            {/* --- LOCATION ASSIGNMENT --- */}
+            {/* Location Assignment */}
             <div>
-              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-2 block ml-1">
-                Primary Assignment
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">
+                Primary Branch Assignment
               </label>
               <div className="relative">
                 <MapPin
-                  className="absolute left-4 top-3 text-gray-400"
-                  size={16}
+                  className="absolute left-3.5 top-3 text-gray-400 pointer-events-none"
+                  size={15}
                 />
                 <select
                   required
-                  className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:border-indigo-500 outline-none appearance-none cursor-pointer"
+                  className="w-full pl-10 pr-8 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:bg-white focus:border-indigo-500 outline-none cursor-pointer"
                   value={formData.locationId}
                   onChange={e =>
                     setFormData({ ...formData, locationId: e.target.value })
@@ -208,20 +268,20 @@ export default function AddStaffModal({ isOpen, onClose, onSave }) {
                 >
                   <option value="">
                     {isLoadingLocs
-                      ? "Loading Nodes..."
-                      : "Select Storage Node / Store"}
+                      ? "Loading Branch Nodes..."
+                      : "Select Assigned Branch / Node"}
                   </option>
-                  <option value="global">Global (Full Access)</option>
+                  <option value="global">All Branches (Global Access)</option>
                   {locations.map(loc => (
                     <option key={loc._id} value={loc._id}>
-                      {loc.name} ({loc.type})
+                      {loc.name} ({loc.type || "Store"})
                     </option>
                   ))}
                 </select>
                 {isLoadingLocs && (
                   <Loader2
-                    className="absolute right-4 top-3 animate-spin text-gray-300"
-                    size={16}
+                    className="absolute right-3.5 top-3 animate-spin text-gray-400"
+                    size={15}
                   />
                 )}
               </div>
@@ -229,65 +289,75 @@ export default function AddStaffModal({ isOpen, onClose, onSave }) {
 
             {/* Role Selection */}
             <div>
-              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-3 block ml-1">
-                Assign Role
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 block ml-1">
+                Assign Security Role
               </label>
               <div className="grid grid-cols-1 gap-2">
-                {roles.map(role => (
-                  <label
-                    key={role.id}
-                    className={`flex items-center justify-between p-3.5 rounded-xl border transition-all cursor-pointer ${
-                      formData.role === role.id
-                        ? "border-indigo-500 bg-indigo-50/30"
-                        : "border-gray-100 bg-white hover:border-indigo-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`p-2 rounded-lg ${formData.role === role.id ? "bg-indigo-600 text-white" : "bg-gray-50 text-gray-400"}`}
-                      >
-                        <Shield size={14} />
+                {roles.map(role => {
+                  const isSelected = formData.role === role.id
+
+                  return (
+                    <label
+                      key={role.id}
+                      className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
+                        isSelected
+                          ? "border-indigo-500 bg-indigo-50/40 ring-1 ring-indigo-500"
+                          : "border-gray-200 bg-white hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`p-2 rounded-lg ${
+                            isSelected
+                              ? "bg-indigo-600 text-white"
+                              : "bg-gray-100 text-gray-400"
+                          }`}
+                        >
+                          <Shield size={14} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-gray-900 leading-tight">
+                            {role.id}
+                          </p>
+                          <p className="text-[10px] text-gray-400 font-medium mt-0.5">
+                            {role.desc}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-gray-800">
-                          {role.id}
-                        </p>
-                        <p className="text-[10px] text-gray-500 font-medium uppercase tracking-tighter">
-                          {role.desc}
-                        </p>
-                      </div>
-                    </div>
-                    <input
-                      type="radio"
-                      name="role"
-                      className="hidden"
-                      onChange={() =>
-                        setFormData({ ...formData, role: role.id })
-                      }
-                    />
-                    {formData.role === role.id && (
-                      <Check size={16} className="text-indigo-600 mr-2" />
-                    )}
-                  </label>
-                ))}
+                      <input
+                        type="radio"
+                        name="role"
+                        checked={isSelected}
+                        className="hidden"
+                        onChange={() =>
+                          setFormData({ ...formData, role: role.id })
+                        }
+                      />
+                      {isSelected && (
+                        <Check size={16} className="text-indigo-600 mr-1" />
+                      )}
+                    </label>
+                  )
+                })}
               </div>
             </div>
 
             {/* Password */}
             <div>
-              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-2 block ml-1">
-                Initial Password
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">
+                Temporary Password <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <Lock
-                  className="absolute left-4 top-3 text-gray-400"
-                  size={16}
+                  className="absolute left-3.5 top-3 text-gray-400 pointer-events-none"
+                  size={15}
                 />
                 <input
                   required
                   type="password"
                   placeholder="••••••••"
-                  className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:border-indigo-500 outline-none"
+                  value={formData.password}
+                  className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
                   onChange={e =>
                     setFormData({ ...formData, password: e.target.value })
                   }
@@ -296,24 +366,29 @@ export default function AddStaffModal({ isOpen, onClose, onSave }) {
             </div>
 
             {/* Actions */}
-            <div className="flex items-center gap-3 pt-4 border-t border-gray-50">
+            <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
               <button
                 type="button"
-                onClick={onClose}
-                className="flex-1 py-3 text-sm font-semibold text-gray-500 hover:text-gray-700 transition"
+                disabled={isSaving}
+                onClick={resetAndClose}
+                className="flex-1 py-2.5 text-xs font-bold text-gray-400 hover:text-gray-600 uppercase tracking-wider transition"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSaving || isLoadingLocs}
-                className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-semibold text-sm shadow-md hover:bg-indigo-700 transition active:scale-[0.98] flex items-center justify-center gap-2 disabled:bg-gray-200"
+                className="flex-[2] py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-md hover:bg-indigo-700 transition active:scale-[0.98] flex items-center justify-center gap-2 disabled:bg-gray-200 disabled:shadow-none"
               >
                 {isSaving ? (
-                  <Loader2 size={18} className="animate-spin" />
+                  <>
+                    <Loader2 size={15} className="animate-spin" />
+                    <span>Provisioning...</span>
+                  </>
                 ) : (
                   <>
-                    <UserPlus size={18} /> Create Account
+                    <UserPlus size={15} />
+                    <span>Create Account</span>
                   </>
                 )}
               </button>
