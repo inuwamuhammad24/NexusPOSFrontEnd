@@ -32,13 +32,11 @@ export default function BillingModal({
   const [isLoadingPlans, setIsLoadingPlans] = useState(false)
   const [loadError, setLoadError] = useState(null)
 
-  // Payment states: 'idle' | 'opening_gateway' | 'verifying_backend'
   const [paymentPhase, setPaymentPhase] = useState("idle")
   const [errorMessage, setErrorMessage] = useState("")
 
   const hasFetchedRef = useRef(false)
 
-  // 1. STABLE PLAN RETRIEVAL WITH VISIBLE ERROR HANDLING
   const fetchPlansFromBackend = async () => {
     try {
       setIsLoadingPlans(true)
@@ -81,7 +79,6 @@ export default function BillingModal({
     }
   }, [isOpen, availablePlans.length, appState.backendURL])
 
-  // Synchronize selection
   useEffect(() => {
     if (isOpen) {
       setSelectedPlanSlug(currentPlanSlug || "business")
@@ -90,13 +87,11 @@ export default function BillingModal({
 
   if (!isOpen) return null
 
-  // Helper: Format Entitlements
   const formatPlanFeatures = plan => {
     const items = []
     const limits = plan.limits || {}
     const feats = plan.features || {}
 
-    // Locations
     if (limits.locations >= 999) {
       items.push("Unlimited Branch Locations")
     } else {
@@ -107,14 +102,12 @@ export default function BillingModal({
       )
     }
 
-    // Staff accounts
     if (limits.users >= 999) {
       items.push("Unlimited Staff & Cashiers")
     } else {
       items.push(`Up to ${limits.users || 2} Staff Accounts`)
     }
 
-    // Catalog items
     if (limits.products >= 999999) {
       items.push("Unlimited Catalog Products")
     } else {
@@ -123,7 +116,6 @@ export default function BillingModal({
       )
     }
 
-    // Capabilities
     if (feats.multiLocation) items.push("Multi-Branch Stock Synchronization")
     if (feats.customerCredit) items.push("Customer Credit & Debt Ledger")
     if (feats.reports === "advanced")
@@ -135,11 +127,9 @@ export default function BillingModal({
   const selectedPlanObj =
     plans.find(p => p.slug === selectedPlanSlug) || plans[0]
 
-  // 2. RIGOROUS CHECKOUT & VERIFICATION HANDLER
   const handlePaystackCheckout = () => {
     setErrorMessage("")
 
-    // Rule 1: Validate account email strictly
     const rawEmail =
       appState.user?.email ||
       appState.user?.ownerEmail ||
@@ -155,7 +145,6 @@ export default function BillingModal({
       return
     }
 
-    // Rule 2: Ensure valid plan
     if (!selectedPlanObj) {
       setErrorMessage("Please select a subscription plan to continue.")
       return
@@ -183,7 +172,7 @@ export default function BillingModal({
       paystack.newTransaction({
         key: publicKey,
         email: trimmedEmail,
-        amount: Math.round(selectedPlanObj.price * 100), // Kobo conversion
+        amount: Math.round(selectedPlanObj.price * 100),
         currency: selectedPlanObj.currency || "NGN",
         metadata: {
           storeId: appState.user?.storeId,
@@ -191,7 +180,6 @@ export default function BillingModal({
           planName: selectedPlanObj.name,
         },
         onSuccess: async transaction => {
-          // Transition state: transaction succeeded on gateway, backend verification starting
           setPaymentPhase("verifying_backend")
 
           try {
@@ -204,7 +192,6 @@ export default function BillingModal({
               },
             )
 
-            // Authoritative confirmation from backend
             appDispatch({
               type: "addFlashMessage",
               payload: {
@@ -249,11 +236,12 @@ export default function BillingModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-headline"
-      className="fixed inset-0 z-[200] flex items-center justify-center p-3 md:p-4 bg-slate-900/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm"
     >
-      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
+      {/* Container: Bottom Sheet on Mobile (< sm), Centered Dialog on Tablet/Desktop */}
+      <div className="bg-white w-full max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[92vh] sm:max-h-[90vh]">
         {/* HEADER */}
-        <div className="p-5 md:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
+        <div className="p-4 sm:p-5 md:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
           <div>
             <div className="flex items-center gap-2">
               <span className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
@@ -267,8 +255,7 @@ export default function BillingModal({
               </h2>
             </div>
             <p className="text-[11px] md:text-xs text-slate-500 mt-0.5">
-              Select an operational tier. Pricing covers a full 30-day billing
-              cycle.
+              Select an operational tier. Pricing covers a full 30-day cycle.
             </p>
           </div>
           <button
@@ -282,8 +269,7 @@ export default function BillingModal({
         </div>
 
         {/* SCROLLABLE CONTENT BODY */}
-        <div className="p-5 md:p-6 space-y-4 overflow-y-auto flex-1">
-          {/* Top Error Alert */}
+        <div className="p-4 sm:p-5 md:p-6 space-y-4 overflow-y-auto flex-1">
           {errorMessage && (
             <div
               role="alert"
@@ -293,11 +279,10 @@ export default function BillingModal({
                 size={16}
                 className="text-rose-600 shrink-0 mt-0.5"
               />
-              <div className="flex-1">{errorMessage}</div>
+              <div className="flex-1 leading-relaxed">{errorMessage}</div>
             </div>
           )}
 
-          {/* Loading Plans State */}
           {isLoadingPlans && (
             <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400">
               <Loader2 className="animate-spin text-indigo-600" size={24} />
@@ -307,7 +292,6 @@ export default function BillingModal({
             </div>
           )}
 
-          {/* Plan Fetch Failure State */}
           {!isLoadingPlans && loadError && (
             <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl text-center space-y-3">
               <AlertTriangle className="text-amber-500 mx-auto" size={24} />
@@ -325,12 +309,11 @@ export default function BillingModal({
             </div>
           )}
 
-          {/* Accessible Plan Selection Grid */}
           {!isLoadingPlans && !loadError && (
             <div
               role="radiogroup"
               aria-label="NexusPOS Plans"
-              className="grid grid-cols-1 md:grid-cols-3 gap-3"
+              className="grid grid-cols-1 sm:grid-cols-3 gap-3"
             >
               {plans.map(plan => {
                 const isSelected = selectedPlanSlug === plan.slug
@@ -352,7 +335,7 @@ export default function BillingModal({
                     } ${isBusy ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
                   >
                     {isPopular && (
-                      <span className="absolute -top-2.5 right-3 bg-indigo-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
+                      <span className="absolute -top-2.5 right-3 bg-indigo-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-sm">
                         Recommended
                       </span>
                     )}
@@ -363,7 +346,7 @@ export default function BillingModal({
                           {plan.name}
                         </h3>
                         <span
-                          className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${
+                          className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
                             isSelected
                               ? "border-indigo-600 bg-indigo-600"
                               : "border-slate-300"
@@ -382,7 +365,7 @@ export default function BillingModal({
                         </span>
                       </p>
 
-                      <ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">
+                      <ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-2.5">
                         {featureList.map((feat, i) => (
                           <li
                             key={i}
@@ -400,7 +383,7 @@ export default function BillingModal({
 
                     <div className="mt-4 pt-2">
                       <div
-                        className={`w-full py-1.5 rounded-lg text-center text-[11px] font-bold transition ${
+                        className={`w-full py-2 rounded-lg text-center text-xs font-bold transition ${
                           isSelected
                             ? "bg-indigo-600 text-white"
                             : "bg-slate-100 text-slate-600"
@@ -415,23 +398,23 @@ export default function BillingModal({
             </div>
           )}
 
-          {/* Payment Trust & Security Notice */}
+          {/* Payment Trust Notice */}
           <div className="flex items-center gap-2 pt-2 text-[11px] text-slate-400 border-t border-slate-100">
             <ShieldCheck size={14} className="text-emerald-600 shrink-0" />
             <span>
-              Transactions are verified in real time via Paystack (Card, USSD,
-              Bank Transfer). Manual monthly renewals.
+              Real-time checkout verified via Paystack (Card, USSD, Bank
+              Transfer).
             </span>
           </div>
         </div>
 
-        {/* FOOTER ACTIONS */}
+        {/* STICKY FOOTER ACTIONS */}
         <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
           <div className="text-xs">
             {selectedPlanObj && (
               <span className="text-slate-500 font-medium">
                 Total due:{" "}
-                <strong className="text-slate-900 font-bold">
+                <strong className="text-slate-900 font-black block sm:inline">
                   {formatNaira(selectedPlanObj.price)}
                 </strong>
               </span>
@@ -443,7 +426,7 @@ export default function BillingModal({
               type="button"
               onClick={onClose}
               disabled={isBusy}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200/60 rounded-xl transition disabled:opacity-50"
+              className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200/60 rounded-xl transition disabled:opacity-50"
             >
               Cancel
             </button>
@@ -451,22 +434,22 @@ export default function BillingModal({
               type="button"
               onClick={handlePaystackCheckout}
               disabled={isBusy || isLoadingPlans || Boolean(loadError)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition disabled:opacity-50"
+              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition disabled:opacity-50 active:scale-95"
             >
               {paymentPhase === "opening_gateway" ? (
                 <>
                   <Loader2 size={14} className="animate-spin" />
-                  <span>Connecting Gateway...</span>
+                  <span>Connecting...</span>
                 </>
               ) : paymentPhase === "verifying_backend" ? (
                 <>
                   <Loader2 size={14} className="animate-spin" />
-                  <span>Verifying Activation...</span>
+                  <span>Verifying...</span>
                 </>
               ) : (
                 <>
                   <CreditCard size={14} />
-                  <span>Proceed to Pay</span>
+                  <span>Pay Now</span>
                 </>
               )}
             </button>

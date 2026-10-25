@@ -36,21 +36,20 @@ const RANGES = {
   today: {
     label: "Today",
     title: "Today's",
-    compare: "vs yesterday (full day)",
+    compare: "vs yesterday",
   },
   "7d": {
     label: "7 Days",
     title: "Last 7 Days",
-    compare: "vs prior 7 days",
+    compare: "vs prior 7d",
   },
   "30d": {
     label: "30 Days",
     title: "Last 30 Days",
-    compare: "vs prior 30 days",
+    compare: "vs prior 30d",
   },
 }
 
-// Default baseline telemetry state
 const DEFAULT_METRICS = {
   revenue: 0,
   prevRevenue: 0,
@@ -67,7 +66,6 @@ const DEFAULT_METRICS = {
   chartData: [],
 }
 
-// Time-of-day greeting generator
 function getTimeOfDayGreeting() {
   const hour = new Date().getHours()
   if (hour < 12) return "Good morning"
@@ -80,7 +78,6 @@ export default function DashboardPage() {
   const appDispatch = useContext(DispatchContext)
   const navigate = useNavigate()
 
-  // State Engine
   const [timeRange, setTimeRange] = useState("today")
   const [metrics, setMetrics] = useState(DEFAULT_METRICS)
   const [hasLoadedInitial, setHasLoadedInitial] = useState(false)
@@ -89,7 +86,6 @@ export default function DashboardPage() {
   const [fetchError, setFetchError] = useState(null)
   const [lastUpdated, setLastUpdated] = useState(null)
 
-  // Role resolution
   const userRole = String(
     appState.user?.role ||
       localStorage.getItem("nexusposRole") ||
@@ -101,7 +97,6 @@ export default function DashboardPage() {
   const isPrivileged =
     userRole === "admin" || userRole === "owner" || userRole === "manager"
 
-  // 1. Data Synchronization with AbortController
   const fetchDashboardData = useCallback(
     async (signal = null) => {
       const token = appState.user?.token || localStorage.getItem("token")
@@ -171,7 +166,7 @@ export default function DashboardPage() {
         console.error("Dashboard fetch error:", err)
         setFetchError(
           err.response?.data?.msg ||
-            "Unable to synchronize store telemetry. Displaying last cached metrics.",
+            "Unable to synchronize store telemetry. Displaying cached metrics.",
         )
       } finally {
         setIsLoading(false)
@@ -187,7 +182,6 @@ export default function DashboardPage() {
     return () => controller.abort()
   }, [fetchDashboardData])
 
-  // 2. Growth & Margin Mathematical Formulations
   const growthInsight = useMemo(() => {
     const current = metrics.revenue
     const prev = metrics.prevRevenue
@@ -214,7 +208,6 @@ export default function DashboardPage() {
     return ((metrics.profit / metrics.revenue) * 100).toFixed(1)
   }, [metrics.revenue, metrics.profit])
 
-  // 3. User Greeting Personalization
   const greetingText = useMemo(() => {
     const timeGreeting = getTimeOfDayGreeting()
     const name =
@@ -222,7 +215,6 @@ export default function DashboardPage() {
     return `${timeGreeting}, ${name}`
   }, [appState.user?.username, appState.user?.businessName])
 
-  // Primary Quick Actions Config
   const quickActions = useMemo(
     () => [
       {
@@ -261,10 +253,9 @@ export default function DashboardPage() {
     [appDispatch, navigate],
   )
 
-  // Full-page error only if initial cold load failed
   if (!hasLoadedInitial && fetchError && !isLoading) {
     return (
-      <div className="min-h-[420px] flex flex-col items-center justify-center gap-3 bg-white rounded-3xl border border-slate-200/80 p-8 text-center max-w-lg mx-auto shadow-sm my-10 font-sans">
+      <div className="min-h-[420px] flex flex-col items-center justify-center gap-3 bg-white rounded-2xl border border-slate-200/80 p-6 text-center max-w-lg mx-auto shadow-sm my-6 font-sans">
         <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
           <AlertTriangle size={24} />
         </div>
@@ -286,25 +277,28 @@ export default function DashboardPage() {
   const currentRangeMeta = RANGES[timeRange] || RANGES.today
 
   return (
-    <div className="space-y-6 pb-16 font-sans text-slate-900 antialiased max-w-7xl mx-auto">
+    <div className="space-y-4 sm:space-y-6 pb-20 md:pb-12 font-sans text-slate-900 antialiased max-w-7xl mx-auto px-1 sm:px-0">
       {/* 1. Header Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/70 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/70 pb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900">
               {greetingText}
             </h1>
             <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
-              {userRole} Account
+              {userRole}
             </span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
-            <span>Terminal status: Online</span>
+          <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-1">
+            <span className="flex items-center gap-1 text-emerald-600 font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />{" "}
+              Live Terminal
+            </span>
             {lastUpdated && (
               <>
                 <span className="text-slate-300">•</span>
-                <span className="flex items-center gap-1 text-[11px] text-slate-400">
-                  <Clock size={11} /> Updated{" "}
+                <span className="flex items-center gap-1 text-slate-400">
+                  <Clock size={11} />{" "}
                   {lastUpdated.toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",
@@ -316,9 +310,9 @@ export default function DashboardPage() {
         </div>
 
         {/* Range Selector & Manual Refresh */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
           <div
-            className="flex items-center bg-slate-100 p-1 rounded-xl"
+            className="flex items-center bg-slate-100 p-1 rounded-xl flex-1 sm:flex-initial justify-between"
             role="group"
             aria-label="Dashboard Date Scope"
           >
@@ -330,7 +324,7 @@ export default function DashboardPage() {
                   type="button"
                   aria-pressed={isActive}
                   onClick={() => setTimeRange(key)}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                  className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition text-center ${
                     isActive
                       ? "bg-white text-indigo-700 shadow-sm"
                       : "text-slate-500 hover:text-slate-800"
@@ -347,27 +341,26 @@ export default function DashboardPage() {
             onClick={() => fetchDashboardData()}
             disabled={isRefreshing}
             aria-label="Refresh operational telemetry"
-            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold shadow-sm transition active:scale-95 disabled:opacity-50"
+            className="p-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold shadow-sm transition active:scale-95 disabled:opacity-50 shrink-0"
           >
             <RefreshCw
-              size={13}
+              size={14}
               className={
                 isRefreshing
                   ? "animate-spin text-indigo-600 motion-reduce:animate-none"
                   : ""
               }
             />
-            <span>{isRefreshing ? "Syncing..." : "Refresh"}</span>
           </button>
         </div>
       </div>
 
       {/* 2. Non-Destructive Error Banner */}
       {fetchError && (
-        <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-800 flex items-center justify-between text-xs font-medium">
+        <div className="p-3.5 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-800 flex items-center justify-between text-xs font-medium">
           <div className="flex items-center gap-2">
-            <AlertTriangle size={16} className="text-amber-600 shrink-0" />
-            <span>{fetchError}</span>
+            <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+            <span className="line-clamp-1">{fetchError}</span>
           </div>
           <button
             type="button"
@@ -379,7 +372,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 3. Action Center */}
+      {/* 3. Action Center: Carousel on Mobile, Grid on Desktop */}
       <ActionCenter
         metrics={metrics}
         isPrivileged={isPrivileged}
@@ -392,12 +385,12 @@ export default function DashboardPage() {
 
       {/* 4. Executive Metric Cards */}
       <div
-        className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 transition-opacity duration-200 ${
+        className={`grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 transition-opacity duration-200 ${
           isRefreshing ? "opacity-60 pointer-events-none" : "opacity-100"
         }`}
       >
         <MetricCard
-          title={`${currentRangeMeta.title} Sales Revenue`}
+          title={`${currentRangeMeta.title} Revenue`}
           value={formatNaira(metrics.revenue)}
           insightText={growthInsight.text}
           insightType={growthInsight.type}
@@ -407,16 +400,16 @@ export default function DashboardPage() {
 
         {isPrivileged ? (
           <MetricCard
-            title={`${currentRangeMeta.title} Gross Margin`}
+            title={`${currentRangeMeta.title} Margin`}
             value={formatNaira(metrics.profit)}
-            subtitle={`${grossMarginRatio}% realized gross margin`}
+            subtitle={`${grossMarginRatio}% realized margin`}
             icon={<Wallet size={15} className="text-emerald-600" />}
           />
         ) : (
           <MetricCard
             title="Terminal Status"
             value="Active Cashier"
-            subtitle="Checkout session verified"
+            subtitle="Session verified"
             icon={<Shield size={15} className="text-slate-400" />}
           />
         )}
@@ -424,17 +417,17 @@ export default function DashboardPage() {
         <MetricCard
           title="Checkout Volume"
           value={`${metrics.orderCount.toLocaleString()} Orders`}
-          subtitle={`Average ticket: ${formatNaira(metrics.averageSale)}`}
+          subtitle={`Avg: ${formatNaira(metrics.averageSale)}`}
           icon={<Receipt size={15} className="text-blue-600" />}
         />
 
         <MetricCard
-          title="Physical Stock Units"
+          title="Stock Units"
           value={`${metrics.totalUnits.toLocaleString()} Units`}
           subtitle={
             isPrivileged
-              ? `Valuation: ${formatNaira(metrics.stockRetailValuation)}`
-              : `${metrics.lowStockCount} items need attention`
+              ? `Val: ${formatNaira(metrics.stockRetailValuation)}`
+              : `${metrics.lowStockCount} items low`
           }
           statusTag={
             metrics.lowStockCount > 0
@@ -445,8 +438,8 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* 5. Quick Actions Command Bar */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-wrap items-center gap-2">
+      {/* 5. Quick Actions Command Bar (Horizontal Swipe Track on Mobile) */}
+      <div className="bg-white p-2.5 sm:p-3.5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-2 overflow-x-auto scrollbar-none">
         {quickActions
           .filter(action => !action.privileged || isPrivileged)
           .map((action, index) => {
@@ -458,8 +451,8 @@ export default function DashboardPage() {
                 onClick={action.handler}
                 className={
                   action.primary
-                    ? "flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/20 hover:bg-indigo-700 transition active:scale-95"
-                    : "flex items-center gap-2 px-4 py-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold transition active:scale-95"
+                    ? "flex items-center gap-1.5 px-4 sm:px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/20 hover:bg-indigo-700 transition active:scale-95 shrink-0"
+                    : "flex items-center gap-1.5 px-3.5 sm:px-4 py-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold transition active:scale-95 shrink-0"
                 }
               >
                 <Icon
@@ -469,54 +462,53 @@ export default function DashboardPage() {
                     (action.primary ? "text-white" : "text-slate-500")
                   }
                 />
-                <span>{action.label}</span>
+                <span className="whitespace-nowrap">{action.label}</span>
               </button>
             )
           })}
       </div>
 
       {/* 6. Interactive Chart & Best Sellers */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm flex flex-col justify-between">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5">
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between gap-3 mb-2">
             <div>
               <h2 className="text-sm font-bold text-slate-900">
                 Sales Velocity Trajectory
               </h2>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Hover or touch across data points to inspect cash-flow
-                intervals.
+                Touch data nodes to inspect interval receipts.
               </p>
             </div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
-              Interactive Curve
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100 shrink-0">
+              Curve
             </span>
           </div>
 
-          <div className="h-52 w-full pt-2">
+          <div className="h-44 sm:h-52 w-full pt-2">
             <InteractiveTelemetryChart
               data={metrics.chartData}
               rangeKey={timeRange}
             />
           </div>
 
-          <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium pt-3 border-t border-slate-100">
+          <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400 font-medium pt-3 border-t border-slate-100">
             <span>
               {metrics.chartData.length > 0
                 ? metrics.chartData[0].label
-                : "Period Opening"}
+                : "Open"}
             </span>
-            <span>Intra-Window Flow</span>
+            <span>Intra-Window Velocity</span>
             <span>
               {metrics.chartData.length > 0
                 ? metrics.chartData[metrics.chartData.length - 1].label
-                : "Period Close"}
+                : "Close"}
             </span>
           </div>
         </div>
 
         {/* Best Sellers */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm flex flex-col justify-between">
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-1">
               <h2 className="text-sm font-bold text-slate-900">
@@ -527,7 +519,7 @@ export default function DashboardPage() {
               </span>
             </div>
             <p className="text-[11px] text-slate-400 mb-3">
-              SKUs driving highest turnover during{" "}
+              SKUs driving highest volume during{" "}
               {currentRangeMeta.title.toLowerCase()} window
             </p>
 
@@ -538,26 +530,26 @@ export default function DashboardPage() {
                     key={item._id || item.sku || `prod-${idx}`}
                     className="py-2.5 flex items-center justify-between text-xs hover:bg-slate-50/60 transition-colors px-1 rounded-lg"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-5 h-5 rounded-lg bg-slate-100 text-slate-600 font-bold flex items-center justify-center text-[10px]">
+                    <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                      <span className="w-5 h-5 rounded-lg bg-slate-100 text-slate-600 font-bold flex items-center justify-center text-[10px] shrink-0">
                         {idx + 1}
                       </span>
-                      <div>
-                        <p className="font-semibold text-slate-800 leading-tight">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-800 leading-tight truncate">
                           {item.name}
                         </p>
                         <p className="text-[10px] text-slate-400">
-                          {item.unitsSold} units dispensed
+                          {item.unitsSold} units
                         </p>
                       </div>
                     </div>
-                    <span className="font-bold text-slate-900">
+                    <span className="font-bold text-slate-900 shrink-0">
                       {formatNaira(item.totalRevenue)}
                     </span>
                   </div>
                 ))
               ) : (
-                <p className="py-8 text-center text-xs text-slate-400">
+                <p className="py-6 text-center text-xs text-slate-400">
                   No sales logged for this specific interval.
                 </p>
               )}
@@ -567,7 +559,7 @@ export default function DashboardPage() {
           <button
             type="button"
             onClick={() => navigate("/inventory")}
-            className="w-full mt-3 py-2 text-center text-xs font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50/50 hover:bg-indigo-50 rounded-xl transition flex items-center justify-center gap-1"
+            className="w-full mt-3 py-2 text-center text-xs font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50/50 hover:bg-indigo-50 rounded-xl transition flex items-center justify-center gap-1 active:scale-95"
           >
             <span>Open Product Catalog</span>
             <ChevronRight size={14} />
@@ -576,9 +568,9 @@ export default function DashboardPage() {
       </div>
 
       {/* 7. Operational Ledger Rows */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
         {/* Low Stock Watchlist */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold text-slate-900">
@@ -604,14 +596,16 @@ export default function DashboardPage() {
                   key={item._id || item.sku}
                   className="py-2.5 flex items-center justify-between text-xs"
                 >
-                  <div>
-                    <p className="font-semibold text-slate-800">{item.name}</p>
-                    <p className="text-[10px] text-slate-400">
-                      SKU: {item.sku} • Alert limit: {item.minStock ?? 10}
+                  <div className="min-w-0 pr-2">
+                    <p className="font-semibold text-slate-800 truncate">
+                      {item.name}
+                    </p>
+                    <p className="text-[10px] text-slate-400 truncate">
+                      SKU: {item.sku} • Alert: {item.minStock ?? 10}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                     <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                       {item.quantity ?? 0} left
                     </span>
@@ -623,7 +617,7 @@ export default function DashboardPage() {
                           payload: { product: item },
                         })
                       }
-                      className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-lg text-xs font-semibold transition active:scale-95"
+                      className="px-2.5 py-1.5 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-lg text-xs font-semibold transition active:scale-95"
                     >
                       Restock
                     </button>
@@ -631,16 +625,16 @@ export default function DashboardPage() {
                 </div>
               ))
             ) : (
-              <div className="py-8 text-center text-xs text-slate-400 flex flex-col items-center gap-1.5">
+              <div className="py-6 text-center text-xs text-slate-400 flex flex-col items-center gap-1.5">
                 <CheckCircle2
-                  size={24}
+                  size={22}
                   className="text-emerald-500 opacity-80"
                 />
                 <p className="font-semibold text-slate-600">
                   Inventory levels stable
                 </p>
                 <p className="text-[11px]">
-                  No catalog items require emergency re-ordering.
+                  No items require emergency re-ordering.
                 </p>
               </div>
             )}
@@ -648,7 +642,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Recent Checkout Sales */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-bold text-slate-900">
               Recent Checkout Sales
@@ -673,12 +667,12 @@ export default function DashboardPage() {
                     key={sale._id || sale.invoiceId}
                     className="py-2.5 flex items-center justify-between text-xs hover:bg-slate-50/50 px-1 rounded-lg transition-colors"
                   >
-                    <div>
+                    <div className="min-w-0 pr-2">
                       <div className="flex items-center gap-2">
-                        <p className="font-mono font-bold text-indigo-600">
+                        <p className="font-mono font-bold text-indigo-600 truncate">
                           {sale.invoiceId || "INV"}
                         </p>
-                        <span className="text-[10px] text-slate-400 font-medium">
+                        <span className="text-[10px] text-slate-400 font-medium shrink-0">
                           {saleDate
                             ? timeRange === "today"
                               ? saleDate.toLocaleTimeString([], {
@@ -692,12 +686,12 @@ export default function DashboardPage() {
                             : ""}
                         </span>
                       </div>
-                      <p className="text-[10px] text-slate-500 mt-0.5">
+                      <p className="text-[10px] text-slate-500 mt-0.5 truncate">
                         {sale.customerName || "Walk-in Buyer"}
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 shrink-0">
                       <div className="text-right">
                         <p className="font-bold text-slate-900">
                           {formatNaira(sale.total)}
@@ -713,16 +707,16 @@ export default function DashboardPage() {
                         onClick={() =>
                           appDispatch({ type: "setReceiptData", payload: sale })
                         }
-                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition active:scale-95"
                       >
-                        <Receipt size={14} />
+                        <Receipt size={15} />
                       </button>
                     </div>
                   </div>
                 )
               })
             ) : (
-              <p className="py-8 text-center text-xs text-slate-400">
+              <p className="py-6 text-center text-xs text-slate-400">
                 No recent transactions recorded on this store.
               </p>
             )}
@@ -733,12 +727,11 @@ export default function DashboardPage() {
   )
 }
 
-// --- MODULAR SUBCOMPONENTS ---
+// --- SUBCOMPONENTS ---
 
 function ActionCenter({
   metrics,
   isPrivileged,
-  onRestockProduct,
   onOpenRestock,
   onNavigateCustomers,
 }) {
@@ -748,44 +741,40 @@ function ActionCenter({
   if (!hasLowStock && !hasDebt) {
     return (
       <div className="bg-emerald-50/60 border border-emerald-200/60 rounded-2xl px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2.5 text-xs font-semibold text-emerald-900">
-          <CheckCircle2 size={16} className="text-emerald-600" />
-          <span>
-            Operational health optimal: Safe inventory buffers and clean ledger
-            balances.
-          </span>
+        <div className="flex items-center gap-2 text-xs font-semibold text-emerald-900">
+          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+          <span>Safe inventory buffers and clean debtor balances.</span>
         </div>
         <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest hidden sm:inline">
-          All Systems Nominal
+          Nominal
         </span>
       </div>
     )
   }
 
   return (
-    <div className="bg-gradient-to-r from-amber-50/90 to-amber-50/40 border border-amber-200/90 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+    <div className="bg-gradient-to-r from-amber-50/95 to-amber-50/60 border border-amber-200/90 rounded-2xl p-3.5 sm:p-5 shadow-sm space-y-2.5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping motion-reduce:animate-none" />
-          <h2 className="text-xs font-black uppercase tracking-wider text-amber-950">
-            Action Center: Immediate Decisions Required
+          <h2 className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-amber-950">
+            Action Center: Immediate Decisions
           </h2>
         </div>
-        <span className="text-[10px] font-bold text-amber-800 bg-amber-100/80 px-2.5 py-0.5 rounded-full">
+        <span className="text-[10px] font-bold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-full">
           {(hasLowStock ? 1 : 0) + (hasDebt ? 1 : 0)} Priorities
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+      <div className="flex sm:grid sm:grid-cols-2 gap-2.5 overflow-x-auto pb-1 sm:pb-0 snap-x snap-mandatory scrollbar-none">
         {hasLowStock && (
-          <div className="bg-white/90 backdrop-blur-sm p-3.5 rounded-xl border border-amber-200/60 flex items-center justify-between gap-3 shadow-sm">
-            <div>
-              <p className="text-xs font-bold text-slate-800">
-                Restock Thresholds Triggered
+          <div className="min-w-[260px] sm:min-w-0 snap-start bg-white/95 backdrop-blur-sm p-3 rounded-xl border border-amber-200/70 flex items-center justify-between gap-2 shadow-sm shrink-0">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-slate-800 truncate">
+                Restock Thresholds
               </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                <b>{metrics.lowStockCount} product(s)</b> are below reserve
-                safety minimums.
+              <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 truncate">
+                <b>{metrics.lowStockCount} item(s)</b> below safety levels.
               </p>
             </div>
             <button
@@ -800,14 +789,14 @@ function ActionCenter({
         )}
 
         {hasDebt && (
-          <div className="bg-white/90 backdrop-blur-sm p-3.5 rounded-xl border border-amber-200/60 flex items-center justify-between gap-3 shadow-sm">
-            <div>
-              <p className="text-xs font-bold text-slate-800">
-                Customer Credit Exposure
+          <div className="min-w-[260px] sm:min-w-0 snap-start bg-white/95 backdrop-blur-sm p-3 rounded-xl border border-amber-200/70 flex items-center justify-between gap-2 shadow-sm shrink-0">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-slate-800 truncate">
+                Debtor Exposure
               </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
+              <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 truncate">
                 <b>{formatNaira(metrics.totalCustomerDebt)}</b> outstanding
-                across debtor accounts.
+                credit.
               </p>
             </div>
             <button
@@ -836,21 +825,21 @@ function MetricCard({
   icon,
 }) {
   return (
-    <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
-      <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
-        <span>{title}</span>
+    <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+      <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">
+        <span className="truncate pr-1">{title}</span>
         {icon}
       </div>
 
-      <div className="my-3">
-        <p className="text-2xl font-black text-slate-900 tracking-tight">
+      <div className="my-2 sm:my-3">
+        <p className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight truncate">
           {value}
         </p>
       </div>
 
       <div>
         {insightText ? (
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold">
+          <div className="flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold flex-wrap">
             <span
               className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
                 insightType === "positive"
@@ -863,20 +852,24 @@ function MetricCard({
               {insightText}
             </span>
             {compareLabel && (
-              <span className="text-slate-400 font-medium">{compareLabel}</span>
+              <span className="text-slate-400 font-medium truncate">
+                {compareLabel}
+              </span>
             )}
           </div>
         ) : statusTag ? (
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="text-slate-400">{subtitle}</span>
+          <div className="flex items-center justify-between text-[10px] sm:text-[11px]">
+            <span className="text-slate-400 truncate">{subtitle}</span>
             <span
-              className={`font-bold ${statusTag.type === "danger" ? "text-rose-600" : "text-emerald-600"}`}
+              className={`font-bold shrink-0 ${statusTag.type === "danger" ? "text-rose-600" : "text-emerald-600"}`}
             >
               {statusTag.text}
             </span>
           </div>
         ) : (
-          <p className="text-[11px] font-medium text-slate-400">{subtitle}</p>
+          <p className="text-[10px] sm:text-[11px] font-medium text-slate-400 truncate">
+            {subtitle}
+          </p>
         )}
       </div>
     </div>
@@ -926,23 +919,22 @@ function InteractiveTelemetryChart({ data = [], rangeKey }) {
       className="relative w-full h-full flex flex-col justify-end"
       onPointerLeave={() => setActiveIndex(null)}
     >
-      {/* Floating Pointer / Keyboard Tooltip */}
       {activePoint && (
         <div
-          className="absolute z-20 pointer-events-none -top-2 bg-slate-900 text-white rounded-xl px-3 py-1.5 text-xs shadow-xl transition-all border border-slate-700"
+          className="absolute z-20 pointer-events-none -top-2 bg-slate-900 text-white rounded-xl px-2.5 py-1 text-xs shadow-xl transition-all border border-slate-700"
           style={{
-            left: `${Math.min(Math.max((activePoint.x / width) * 100, 12), 88)}%`,
+            left: `${Math.min(Math.max((activePoint.x / width) * 100, 15), 85)}%`,
             transform: "translateX(-50%)",
           }}
         >
-          <p className="text-[10px] text-slate-400 font-bold uppercase">
-            Interval: {activePoint.label}
+          <p className="text-[9px] text-slate-400 font-bold uppercase">
+            Time: {activePoint.label}
           </p>
-          <p className="font-bold text-white text-xs">
+          <p className="font-bold text-white text-[11px] leading-tight">
             {formatNaira(activePoint.amount)}
           </p>
-          <p className="text-[10px] text-indigo-300">
-            {activePoint.orders} completed ticket(s)
+          <p className="text-[9px] text-indigo-300">
+            {activePoint.orders} order(s)
           </p>
         </div>
       )}
@@ -951,7 +943,7 @@ function InteractiveTelemetryChart({ data = [], rangeKey }) {
         viewBox={`0 0 ${width} ${height}`}
         className="w-full h-full overflow-visible"
         role="img"
-        aria-label={`Sales volume curve for ${rangeKey} showing pacing across intervals`}
+        aria-label={`Sales volume curve for ${rangeKey}`}
       >
         <defs>
           <linearGradient id="velocityGrad" x1="0" y1="0" x2="0" y2="1">
@@ -988,7 +980,6 @@ function InteractiveTelemetryChart({ data = [], rangeKey }) {
           strokeLinejoin="round"
         />
 
-        {/* Nodes with Accessible Focus and Pointer Handlers */}
         {points.map((pt, idx) => {
           const isSelected = activeIndex === idx
           return (
@@ -1013,7 +1004,7 @@ function InteractiveTelemetryChart({ data = [], rangeKey }) {
                     : "fill-indigo-600 hover:fill-indigo-700"
                 }`}
               />
-              <circle cx={pt.x} cy={pt.y} r="18" fill="transparent" />
+              <circle cx={pt.x} cy={pt.y} r="20" fill="transparent" />
             </g>
           )
         })}
