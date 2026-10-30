@@ -1,8 +1,15 @@
 // Main.js
-import React, { Suspense, lazy } from "react"
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
+import React, { useEffect, Suspense, lazy } from "react"
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+} from "react-router-dom"
 import { useImmerReducer } from "use-immer"
 import ReactDOM from "react-dom/client"
+import Axios from "axios"
 import StateContext from "./StateContext"
 import DispatchContext from "./DispatchContext"
 import "./style.css"
@@ -40,7 +47,6 @@ function RoleRoute({ userRole, allowedRoles, children }) {
     .toLowerCase()
     .trim()
 
-  // Admin & Owner have universal privilege
   if (normalizedUserRole === "admin" || normalizedUserRole === "owner") {
     return children
   }
@@ -65,12 +71,13 @@ export default function App() {
     isLogin: Boolean(localStorage.getItem("token")),
     isReceiptOpen: false,
     backendURL: "https://mtappbackend.onrender.com",
-    // backendURL: "http://10.21.204.246:8000",
+    // backendURL: "http://localhost:8000",
     sales: [],
     inventory: [],
     customers: [],
     staff: [],
     receitData: {},
+    tempReceiptData: null,
     tempReceiptId: "",
     isLocationModalOpen: false,
     flashMessage: {
@@ -91,18 +98,20 @@ export default function App() {
     switch (action.type) {
       case "login":
         localStorage.setItem("token", action.data.token)
+        localStorage.setItem("nexusposToken", action.data.token)
         localStorage.setItem("email", action.data.email || "")
-        localStorage.setItem("username", action.data.username)
+        localStorage.setItem("username", action.data.username || "Operator")
         localStorage.setItem("role", action.data.role || "cashier")
-        localStorage.setItem("storeId", action.data.storeId)
+        localStorage.setItem("nexusposRole", action.data.role || "cashier")
+        localStorage.setItem("storeId", action.data.storeId || "")
         localStorage.setItem("businessName", action.data.businessName || "")
 
         draft.isLogin = true
         draft.user = {
           token: action.data.token,
-          username: action.data.username,
+          username: action.data.username || "Operator",
           role: action.data.role || "cashier",
-          storeId: action.data.storeId,
+          storeId: action.data.storeId || "",
           businessName: action.data.businessName || "",
           email: action.data.email || "",
         }
@@ -128,16 +137,19 @@ export default function App() {
 
       case "addFlashMessage":
         draft.flashMessage.msgs.push({
-          type: action.payload.type,
+          type: action.payload.type || "info",
           msg: action.payload.msg,
           id: new Date().getTime(),
         })
         draft.flashMessage.isFlashMessageOpen = true
         break
 
-      // Staff Reducer Case
       case "setStaff":
         draft.staff = Array.isArray(action.payload) ? action.payload : []
+        break
+
+      case "setCustomers":
+        draft.customers = Array.isArray(action.payload) ? action.payload : []
         break
 
       // Modal Triggers
@@ -179,6 +191,7 @@ export default function App() {
       // Receipt Handlers
       case "setReceiptData":
         draft.tempReceiptData = action.payload
+        draft.receitData = action.payload
         draft.isReceiptOpen = true
         break
       case "openReceipt":
@@ -196,6 +209,48 @@ export default function App() {
 
   const [state, dispatch] = useImmerReducer(reducer, initialState)
   const userRole = state.user?.role || localStorage.getItem("role") || "cashier"
+
+  // Global Session Expiration & Token Interceptor
+  useEffect(() => {
+    const interceptor = Axios.interceptors.response.use(
+      response => response,
+      error => {
+        const status = error.response?.status
+        const data = error.response?.data || {}
+        const errorMsg = String(
+          data.msg || data.message || data.error || "",
+        ).toLowerCase()
+
+        const isAuthExpired =
+          status === 401 ||
+          data.code === "TOKEN_EXPIRED" ||
+          data.code === "TOKEN_INVALID" ||
+          errorMsg.includes("jwt expired") ||
+          errorMsg.includes("token expired") ||
+          errorMsg.includes("expired store session")
+
+        if (isAuthExpired) {
+          localStorage.clear()
+          dispatch({ type: "logout" })
+          dispatch({
+            type: "addFlashMessage",
+            payload: {
+              type: "error",
+              msg: "Your security session has expired. Please sign in again.",
+            },
+          })
+
+          if (!window.location.pathname.includes("/login")) {
+            window.location.href = "/login"
+          }
+        }
+
+        return Promise.reject(error)
+      },
+    )
+
+    return () => Axios.interceptors.response.eject(interceptor)
+  }, [dispatch])
 
   return (
     <StateContext.Provider value={state}>
@@ -279,14 +334,12 @@ export default function App() {
                   }
                 />
 
-                {/* Fallback to Dashboard inside App */}
                 <Route
                   path="*"
                   element={<Navigate to="/dashboard" replace />}
                 />
               </Route>
             ) : (
-              // Unauthenticated Redirection
               <Route path="*" element={<Navigate to="/login" replace />} />
             )}
           </Routes>
