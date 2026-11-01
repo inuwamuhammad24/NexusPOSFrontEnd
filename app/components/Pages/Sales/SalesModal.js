@@ -1,3 +1,4 @@
+// components/Pages/Sales/SalesModal.js
 import React, { useState, useEffect, useRef, useContext } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
@@ -11,6 +12,10 @@ import {
   AlertTriangle,
   ChevronRight,
   Store,
+  Plus,
+  Minus,
+  CreditCard,
+  ArrowRight,
 } from "lucide-react"
 import StateContext from "../../../StateContext"
 import DispatchContext from "../../../DispatchContext"
@@ -28,6 +33,9 @@ export default function CompactSalesModal({ onSaleComplete }) {
   const [invoice, setInvoice] = useState([])
   const [isSearching, setIsSearching] = useState(false)
   const [saving, setIsSaving] = useState(false)
+
+  // Mobile Active Tab: 'basket' | 'payment'
+  const [mobileTab, setMobileTab] = useState("basket")
 
   // --- LOCATIONS & TENANT CONTEXT ---
   const [locations, setLocations] = useState([])
@@ -78,6 +86,7 @@ export default function CompactSalesModal({ onSaleComplete }) {
       (parseFloat(item.price || 0) * (item.qty || 1) - (item.discount || 0)),
     0,
   )
+  const totalItemCount = invoice.reduce((sum, item) => sum + (item.qty || 1), 0)
   const cashReceived = parseFloat(amountPaid) || 0
   const balanceToCredit = Math.max(subtotal - cashReceived, 0)
   const isOverLimit =
@@ -224,6 +233,22 @@ export default function CompactSalesModal({ onSaleComplete }) {
     )
   }
 
+  const incrementQty = id => {
+    setInvoice(
+      invoice.map(item =>
+        item.tempId === id ? { ...item, qty: item.qty + 1 } : item,
+      ),
+    )
+  }
+
+  const decrementQty = id => {
+    setInvoice(
+      invoice.map(item =>
+        item.tempId === id ? { ...item, qty: Math.max(1, item.qty - 1) } : item,
+      ),
+    )
+  }
+
   const handleCheckout = async () => {
     if (invoice.length === 0 || saving) return
 
@@ -246,6 +271,7 @@ export default function CompactSalesModal({ onSaleComplete }) {
           msg: "Customer profile required when selling on credit.",
         },
       })
+      setMobileTab("payment")
       return
     }
 
@@ -324,41 +350,42 @@ export default function CompactSalesModal({ onSaleComplete }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 antialiased selection:bg-indigo-500 selection:text-white">
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-0 sm:p-4 antialiased selection:bg-indigo-500 selection:text-white">
       <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: 10 }}
-        className="bg-white w-full max-w-5xl h-[88vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200"
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 30 }}
+        transition={{ type: "spring", damping: 25, stiffness: 220 }}
+        className="bg-white w-full max-w-5xl h-[95dvh] sm:h-[88vh] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200"
       >
         {/* TOP MODAL BAR */}
-        <div className="px-6 py-3.5 border-b border-gray-200/80 flex justify-between items-center bg-white shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/20">
+        <div className="px-4 sm:px-6 py-3 border-b border-gray-200/80 flex justify-between items-center bg-white shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/20 shrink-0">
               <ShoppingCart size={16} />
             </div>
-            <div>
-              <h2 className="text-xs font-bold text-gray-900 uppercase tracking-tight">
-                POS Sales Terminal
+            <div className="min-w-0">
+              <h2 className="text-xs font-bold text-gray-900 uppercase tracking-tight truncate">
+                POS Terminal
               </h2>
-              <p className="text-[10px] text-gray-400 font-medium">
+              <p className="text-[10px] text-gray-400 font-medium truncate">
                 {appState.user?.businessName || "Store"} • Active Register
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {/* Branch / Location Selector */}
             {locations.length > 0 && (
-              <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1 text-xs">
-                <Store size={13} className="text-indigo-600" />
+              <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-xl px-2 py-1 text-xs max-w-[140px] sm:max-w-none">
+                <Store size={12} className="text-indigo-600 shrink-0" />
                 <select
                   value={selectedLocationId}
                   onChange={e => {
                     setSelectedLocationId(e.target.value)
                     localStorage.setItem("locationId", e.target.value)
                   }}
-                  className="bg-transparent text-[11px] font-semibold text-gray-700 outline-none cursor-pointer"
+                  className="bg-transparent text-[11px] font-semibold text-gray-700 outline-none cursor-pointer truncate"
                 >
                   {locations.map(loc => (
                     <option key={loc._id} value={loc._id}>
@@ -371,21 +398,59 @@ export default function CompactSalesModal({ onSaleComplete }) {
 
             <button
               onClick={() => appDispatch({ type: "closeSalesModal" })}
-              className="p-1.5 text-gray-400 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-xl transition"
+              className="p-2 text-gray-400 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-xl transition"
+              aria-label="Close terminal"
             >
               <X size={16} />
             </button>
           </div>
         </div>
 
-        {/* WORKSPACE */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* LEFT: CART & PRODUCT SEARCH */}
-          <div className="flex-[1.5] flex flex-col bg-slate-50/50 border-r border-gray-200/80 overflow-hidden">
+        {/* MOBILE SEGMENTED CONTROL TAB (< md) */}
+        <div className="md:hidden flex border-b border-gray-100 bg-slate-50/80 p-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => setMobileTab("basket")}
+            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              mobileTab === "basket"
+                ? "bg-white text-indigo-700 shadow-sm"
+                : "text-gray-500 hover:text-gray-900"
+            }`}
+          >
+            <ShoppingCart size={13} />
+            <span>Basket ({totalItemCount})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab("payment")}
+            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              mobileTab === "payment"
+                ? "bg-white text-indigo-700 shadow-sm"
+                : "text-gray-500 hover:text-gray-900"
+            }`}
+          >
+            <CreditCard size={13} />
+            <span>Payment & Customer</span>
+            {subtotal > 0 && (
+              <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.2 rounded font-black">
+                {formatNaira(subtotal)}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* WORKSPACE AREA */}
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+          {/* --- LEFT: CART & PRODUCT SEARCH --- */}
+          <div
+            className={`flex-1 md:flex-[1.5] flex-col bg-slate-50/50 border-r border-gray-200/80 overflow-hidden ${
+              mobileTab === "basket" ? "flex" : "hidden md:flex"
+            }`}
+          >
             {/* SEARCH BAR */}
-            <div className="p-4 relative shrink-0">
+            <div className="p-3 sm:p-4 relative shrink-0">
               <Search
-                className="absolute left-7 top-7 text-gray-400 pointer-events-none"
+                className="absolute left-6 sm:left-7 top-6 sm:top-7 text-gray-400 pointer-events-none"
                 size={16}
               />
               <input
@@ -395,11 +460,11 @@ export default function CompactSalesModal({ onSaleComplete }) {
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Scan barcode or type product name..."
-                className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 placeholder:text-gray-400 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 shadow-sm"
+                className="w-full pl-9 sm:pl-10 pr-9 sm:pr-10 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 placeholder:text-gray-400 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 shadow-sm"
               />
               {isSearching && (
                 <Loader2
-                  className="absolute right-7 top-7 text-indigo-600 animate-spin"
+                  className="absolute right-6 sm:right-7 top-6 sm:top-7 text-indigo-600 animate-spin"
                   size={15}
                 />
               )}
@@ -411,7 +476,7 @@ export default function CompactSalesModal({ onSaleComplete }) {
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
-                    className="absolute left-4 right-4 mt-1.5 bg-white border border-gray-200 shadow-xl rounded-xl z-50 overflow-hidden divide-y divide-gray-100 max-h-60 overflow-y-auto"
+                    className="absolute left-3 right-3 sm:left-4 sm:right-4 mt-1.5 bg-white border border-gray-200 shadow-xl rounded-xl z-50 overflow-hidden divide-y divide-gray-100 max-h-60 overflow-y-auto"
                   >
                     {suggestions.map((p, index) => (
                       <div
@@ -423,9 +488,9 @@ export default function CompactSalesModal({ onSaleComplete }) {
                             : "hover:bg-indigo-50/70"
                         }`}
                       >
-                        <div>
+                        <div className="min-w-0 pr-2">
                           <p
-                            className={`text-xs font-bold ${
+                            className={`text-xs font-bold truncate ${
                               index === selectedIndex
                                 ? "text-white"
                                 : "text-gray-900"
@@ -434,7 +499,7 @@ export default function CompactSalesModal({ onSaleComplete }) {
                             {p.name}
                           </p>
                           <p
-                            className={`text-[10px] uppercase font-mono ${
+                            className={`text-[10px] uppercase font-mono truncate ${
                               index === selectedIndex
                                 ? "text-indigo-200"
                                 : "text-gray-400"
@@ -444,7 +509,7 @@ export default function CompactSalesModal({ onSaleComplete }) {
                           </p>
                         </div>
                         <p
-                          className={`text-xs font-black ${
+                          className={`text-xs font-black shrink-0 ${
                             index === selectedIndex
                               ? "text-white"
                               : "text-indigo-600"
@@ -460,9 +525,9 @@ export default function CompactSalesModal({ onSaleComplete }) {
             </div>
 
             {/* CART LINE ITEMS */}
-            <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
+            <div className="flex-1 overflow-y-auto px-3 sm:px-4 pb-20 md:pb-4 space-y-2">
               {invoice.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-gray-400 py-16 text-center">
+                <div className="h-full flex flex-col items-center justify-center text-gray-400 py-12 sm:py-16 text-center">
                   <ShoppingCart
                     size={36}
                     className="text-gray-300 mb-2 stroke-[1.5]"
@@ -471,7 +536,7 @@ export default function CompactSalesModal({ onSaleComplete }) {
                     Your basket is empty
                   </p>
                   <p className="text-[11px] text-gray-400 mt-0.5">
-                    Scan an item or use the search bar above
+                    Scan an item or type in the search bar above
                   </p>
                 </div>
               ) : (
@@ -479,8 +544,9 @@ export default function CompactSalesModal({ onSaleComplete }) {
                   <motion.div
                     layout
                     key={item.tempId}
-                    className="flex items-center gap-3 p-3 bg-white border border-gray-200/80 rounded-xl shadow-sm hover:border-gray-300 transition"
+                    className="p-3 bg-white border border-gray-200/80 rounded-xl shadow-sm hover:border-gray-300 transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
                   >
+                    {/* Item Identity */}
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-bold text-gray-900 truncate">
                         {item.name}
@@ -490,11 +556,13 @@ export default function CompactSalesModal({ onSaleComplete }) {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <div className="flex flex-col">
-                        <label className="text-[9px] font-semibold text-gray-400 uppercase text-center">
-                          Rate
-                        </label>
+                    {/* Controls Row */}
+                    <div className="flex items-center justify-between sm:justify-end gap-2.5 pt-1 sm:pt-0 border-t sm:border-t-0 border-gray-50">
+                      {/* Price override */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-gray-400 font-semibold sm:hidden">
+                          Rate:
+                        </span>
                         <input
                           type="number"
                           className="w-20 px-2 py-1 bg-indigo-50/60 border border-indigo-100 text-xs font-bold text-center rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:bg-white outline-none"
@@ -505,38 +573,47 @@ export default function CompactSalesModal({ onSaleComplete }) {
                         />
                       </div>
 
-                      <div className="flex flex-col">
-                        <label className="text-[9px] font-semibold text-gray-400 uppercase text-center">
-                          Qty
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          className="w-12 px-2 py-1 bg-gray-50 border border-gray-200 text-xs font-bold text-center rounded-lg outline-none focus:bg-white focus:border-indigo-400"
-                          value={item.qty}
-                          onChange={e =>
-                            updateItem(item.tempId, "qty", e.target.value)
-                          }
-                        />
+                      {/* Touch Qty Controls */}
+                      <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => decrementQty(item.tempId)}
+                          className="p-1 hover:bg-white rounded text-gray-600 active:scale-90 transition"
+                          aria-label="Decrease quantity"
+                        >
+                          <Minus size={12} />
+                        </button>
+                        <span className="w-8 text-center text-xs font-bold text-gray-900">
+                          {item.qty}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => incrementQty(item.tempId)}
+                          className="p-1 hover:bg-white rounded text-gray-600 active:scale-90 transition"
+                          aria-label="Increase quantity"
+                        >
+                          <Plus size={12} />
+                        </button>
                       </div>
 
-                      <div className="w-20 text-right flex flex-col">
-                        <label className="text-[9px] font-semibold text-gray-400 uppercase">
-                          Total
-                        </label>
-                        <span className="text-xs font-bold text-gray-900">
+                      {/* Line Item Total */}
+                      <div className="w-16 sm:w-20 text-right">
+                        <span className="text-xs font-bold text-gray-900 block truncate">
                           {formatNaira(item.price * item.qty)}
                         </span>
                       </div>
 
+                      {/* Remove Button */}
                       <button
+                        type="button"
                         onClick={() =>
                           setInvoice(
                             invoice.filter(i => i.tempId !== item.tempId),
                           )
                         }
-                        className="p-1.5 text-gray-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition mt-3"
+                        className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition active:scale-90"
                         title="Remove item"
+                        aria-label="Remove item"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -547,16 +624,20 @@ export default function CompactSalesModal({ onSaleComplete }) {
             </div>
           </div>
 
-          {/* RIGHT: SETTLEMENT & CHECKOUT */}
-          <div className="flex-1 p-6 flex flex-col justify-between bg-white overflow-y-auto">
+          {/* --- RIGHT: SETTLEMENT & CHECKOUT --- */}
+          <div
+            className={`flex-1 p-4 sm:p-6 flex-col justify-between bg-white overflow-y-auto pb-24 md:pb-6 ${
+              mobileTab === "payment" ? "flex" : "hidden md:flex"
+            }`}
+          >
             <div>
-              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 sm:mb-4 flex items-center gap-1.5">
                 <User size={13} className="text-indigo-600" /> Customer &
                 Billing
               </h3>
 
               {/* Customer Lookup */}
-              <div className="relative mb-5">
+              <div className="relative mb-4">
                 <input
                   placeholder="Search customer account or walk-in..."
                   className={`w-full pl-3.5 pr-10 py-2.5 rounded-xl border text-xs font-semibold outline-none transition-all ${
@@ -579,11 +660,12 @@ export default function CompactSalesModal({ onSaleComplete }) {
                 <div className="absolute right-3 top-3">
                   {selectedCustomer ? (
                     <button
+                      type="button"
                       onClick={() => {
                         setSelectedCustomer(null)
                         setCustomerSearch("")
                       }}
-                      className="text-indigo-600 hover:text-indigo-800"
+                      className="text-indigo-600 hover:text-indigo-800 p-0.5"
                     >
                       <X size={15} />
                     </button>
@@ -606,7 +688,7 @@ export default function CompactSalesModal({ onSaleComplete }) {
                         <div
                           key={c._id}
                           onClick={() => setSelectedCustomer(c)}
-                          className="px-4 py-2.5 hover:bg-gray-50 cursor-pointer flex justify-between items-center"
+                          className="px-4 py-2.5 hover:bg-gray-50 cursor-pointer flex justify-between items-center active:bg-indigo-50"
                         >
                           <div>
                             <p className="text-xs font-bold text-gray-800">
@@ -625,13 +707,13 @@ export default function CompactSalesModal({ onSaleComplete }) {
               </div>
 
               {/* Settlement Matrix */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-gray-200/80 space-y-3.5 mb-4">
+              <div className="bg-slate-50 p-3.5 sm:p-4 rounded-xl border border-gray-200/80 space-y-3 mb-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs font-medium text-gray-500">
-                    Settlement Method
+                  <span className="text-xs font-medium text-gray-600">
+                    Payment Method
                   </span>
                   <select
-                    className="bg-white border border-gray-200 rounded-lg px-2.5 py-1 text-xs font-bold text-indigo-600 outline-none cursor-pointer shadow-sm"
+                    className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-indigo-600 outline-none cursor-pointer shadow-sm"
                     value={paymentMethod}
                     onChange={e => handlePaymentMethodChange(e.target.value)}
                   >
@@ -642,7 +724,7 @@ export default function CompactSalesModal({ onSaleComplete }) {
                 </div>
 
                 <div className="flex justify-between items-center">
-                  <span className="text-xs font-medium text-gray-500">
+                  <span className="text-xs font-medium text-gray-600">
                     Amount Received
                   </span>
                   <div className="flex items-center gap-1">
@@ -650,7 +732,7 @@ export default function CompactSalesModal({ onSaleComplete }) {
                     <input
                       type="number"
                       placeholder={subtotal.toString()}
-                      className="w-28 px-2 py-1 bg-white border border-gray-200 rounded-lg text-right text-xs font-bold text-emerald-600 outline-none shadow-sm focus:border-indigo-400"
+                      className="w-28 px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-right text-xs font-bold text-emerald-600 outline-none shadow-sm focus:border-indigo-400"
                       value={amountPaid}
                       onChange={e => setAmountPaid(e.target.value)}
                     />
@@ -658,8 +740,8 @@ export default function CompactSalesModal({ onSaleComplete }) {
                 </div>
 
                 <div className="flex justify-between items-center pt-2.5 border-t border-gray-200/70">
-                  <span className="text-xs font-medium text-gray-500">
-                    Outstanding Balance
+                  <span className="text-xs font-medium text-gray-600">
+                    Outstanding Debt
                   </span>
                   <span
                     className={`text-xs font-bold ${
@@ -675,14 +757,14 @@ export default function CompactSalesModal({ onSaleComplete }) {
                 <div className="mb-4 p-3 bg-rose-50 rounded-xl text-rose-700 flex items-center gap-2 border border-rose-100 text-xs font-medium">
                   <AlertTriangle size={15} className="shrink-0 text-rose-600" />
                   <span>
-                    Customer credit limit reached. Upfront settlement required.
+                    Customer credit limit exceeded. Upfront settlement required.
                   </span>
                 </div>
               )}
             </div>
 
-            {/* TOTAL & SUBMIT BUTTON */}
-            <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
+            {/* DESKTOP TOTAL & SUBMIT BAR (Hidden on mobile; mobile uses persistent sticky bar below) */}
+            <div className="hidden md:flex pt-4 border-t border-gray-100 items-center justify-between">
               <div>
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
                   Gross Total
@@ -710,6 +792,58 @@ export default function CompactSalesModal({ onSaleComplete }) {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* --- MOBILE PERSISTENT BOTTOM SUMMARY BAR (< md) --- */}
+        <div className="md:hidden p-3.5 bg-white border-t border-gray-200/80 flex items-center justify-between gap-3 shrink-0 shadow-lg">
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none">
+              Total ({totalItemCount} items)
+            </p>
+            <p className="text-lg font-black text-gray-900 mt-1 leading-none">
+              {formatNaira(subtotal)}
+            </p>
+          </div>
+
+          {mobileTab === "basket" ? (
+            <button
+              type="button"
+              disabled={invoice.length === 0}
+              onClick={() => setMobileTab("payment")}
+              className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-indigo-600/20 active:scale-95 disabled:opacity-40 transition"
+            >
+              <span>Review & Pay</span>
+              <ArrowRight size={14} />
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMobileTab("basket")}
+                className="px-3 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-xs font-bold active:scale-95 transition"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={handleCheckout}
+                disabled={invoice.length === 0 || saving}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/20 active:scale-95 disabled:opacity-40 transition"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Finishing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Banknote size={14} />
+                    <span>Pay {formatNaira(cashReceived || subtotal)}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </motion.div>
     </div>

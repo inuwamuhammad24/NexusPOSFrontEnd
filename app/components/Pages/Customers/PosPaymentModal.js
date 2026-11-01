@@ -1,3 +1,4 @@
+// components/Pages/Customers/PosPaymentModal.js
 import React, { useState, useContext } from "react"
 import { motion } from "framer-motion"
 import { X, Save, Loader2, Banknote, MessageSquare } from "lucide-react"
@@ -11,90 +12,151 @@ export default function PostPaymentModal({ customer, onClose, onRefresh }) {
 
   const [amount, setAmount] = useState("")
   const [method, setMethod] = useState("Cash")
-  const [note, setNote] = useState("") // New state for notes
+  const [note, setNote] = useState("")
   const [isSaving, setIsSaving] = useState(false)
+
+  if (!customer) return null
 
   const handleSubmit = async e => {
     e.preventDefault()
+
+    const token =
+      appState.user?.token ||
+      localStorage.getItem("token") ||
+      localStorage.getItem("nexusposToken")
+
+    if (!token) {
+      appDispatch({
+        type: "addFlashMessage",
+        payload: { type: "error", msg: "Session missing. Please re-login." },
+      })
+      return
+    }
+
+    const numericAmount = parseFloat(amount)
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      appDispatch({
+        type: "addFlashMessage",
+        payload: { type: "error", msg: "Please enter a valid payment amount." },
+      })
+      return
+    }
+
     setIsSaving(true)
     try {
       await Axios.post(`${appState.backendURL}/post-customer-payment`, {
+        token, // <-- REQUIRED: Satisfies storeGuard
         customerId: customer._id,
-        amount: parseFloat(amount),
+        amount: numericAmount,
         paymentMethod: method,
-        note: note, // Sending the note to the backend ledger logic
-        operatorName: localStorage.getItem("fullName") || "Admin",
+        note: note.trim(),
+        operatorName:
+          appState.user?.username ||
+          localStorage.getItem("username") ||
+          "Staff",
       })
+
       appDispatch({
         type: "addFlashMessage",
-        payload: { type: "success", msg: "Payment Posted Successfully" },
+        payload: { type: "success", msg: "Payment posted successfully!" },
       })
-      onRefresh()
-      onClose()
-    } catch (e) {
-      const errorMsg = e.response?.data || "Payment failed. Please try again."
+
+      if (typeof onRefresh === "function") onRefresh()
+      if (typeof onClose === "function") onClose()
+    } catch (err) {
+      console.error("Payment submission error:", err)
+      const errorMsg =
+        err.response?.data?.msg ||
+        err.response?.data?.message ||
+        "Payment posting failed. Please check ledger balance."
+
       appDispatch({
         type: "addFlashMessage",
-        payload: { type: "error", msg: errorMsg },
+        payload: {
+          type: "error",
+          msg: typeof errorMsg === "string" ? errorMsg : "Payment failed",
+        },
       })
     } finally {
       setIsSaving(false)
     }
   }
 
+  const outstandingDebt = Number(customer.creditBalance ?? customer.debt ?? 0)
+
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="bg-white w-full max-w-sm rounded-xl shadow-2xl overflow-hidden border border-gray-100"
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 20, opacity: 0 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden border border-slate-100"
       >
-        {/* Header - Standardized Padding/Roundness */}
-        <div className="px-6 py-4 bg-emerald-600 text-white flex justify-between items-center">
-          <div className="flex items-center gap-3">
+        {/* Header */}
+        <div className="px-5 py-4 bg-emerald-600 text-white flex justify-between items-center">
+          <div className="flex items-center gap-2.5">
             <Banknote size={20} />
             <div>
-              <h2 className="text-xs font-black uppercase tracking-tight">
-                Post Payment
+              <h2 className="text-xs font-black uppercase tracking-wider">
+                Post Debt Settlement
               </h2>
-              <p className="text-[10px] font-bold opacity-80">
-                {customer.fullName || customer.name}
+              <p className="text-[11px] font-bold opacity-90 truncate max-w-[200px]">
+                {customer.fullName || customer.name || "Customer Account"}
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close modal"
             className="p-1.5 hover:bg-black/10 rounded-full transition-colors"
           >
             <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {/* Debt Summary */}
-          <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-lg text-center">
-            <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">
+          <div className="bg-emerald-50/70 border border-emerald-100 p-3.5 rounded-xl text-center">
+            <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-widest mb-0.5">
               Current Outstanding Debt
             </p>
             <h3 className="text-xl font-black text-emerald-700">
-              ₦{(customer.creditBalance || 0).toLocaleString()}
+              ₦{outstandingDebt.toLocaleString()}
             </h3>
           </div>
 
           {/* Amount Input */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
-              Payment Amount
-            </label>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                Payment Amount
+              </label>
+              {outstandingDebt > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setAmount(String(outstandingDebt))}
+                  className="text-[10px] font-bold text-emerald-600 hover:underline"
+                >
+                  Pay Full Balance
+                </button>
+              )}
+            </div>
             <div className="relative">
-              <span className="absolute left-4 top-3.5 font-black text-emerald-600 text-lg">
+              <span className="absolute left-3.5 top-2.5 font-black text-emerald-600 text-base">
                 ₦
               </span>
               <input
                 required
                 autoFocus
                 type="number"
-                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-xl font-black text-gray-800 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                step="any"
+                min="1"
+                className="w-full pl-8 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-lg font-black text-slate-800 focus:bg-white focus:border-emerald-500 outline-none transition"
                 placeholder="0.00"
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
@@ -103,45 +165,59 @@ export default function PostPaymentModal({ customer, onClose, onRefresh }) {
           </div>
 
           {/* Payment Method Selector */}
-          <div className="grid grid-cols-3 gap-2">
-            {["Cash", "POS", "Transfer"].map(m => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMethod(m)}
-                className={`py-2 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${method === m ? "bg-emerald-600 text-white border-emerald-600 shadow-md" : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"}`}
-              >
-                {m}
-              </button>
-            ))}
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+              Payment Method
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {["Cash", "POS", "Transfer"].map(m => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMethod(m)}
+                  className={`py-2 rounded-xl text-xs font-bold transition ${
+                    method === m
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* NEW: Note / Reference Section */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
-              <MessageSquare size={10} /> Note / Reference
+          {/* Note / Reference Section */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
+              <MessageSquare size={11} /> Note / Reference
             </label>
             <textarea
               rows="2"
-              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 focus:border-emerald-500 outline-none transition-all resize-none"
-              placeholder="e.g. Bank transfer ref, partial payment for oct..."
+              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:border-emerald-500 outline-none transition resize-none"
+              placeholder="e.g. Bank transfer ref or receipt number..."
               value={note}
               onChange={e => setNote(e.target.value)}
             />
           </div>
 
-          {/* Action Button */}
+          {/* Submit Action */}
           <button
             type="submit"
             disabled={isSaving || !amount}
-            className="w-full py-4 bg-emerald-600 text-white rounded-lg font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 hover:bg-emerald-700 active:scale-[0.98] transition-all disabled:bg-gray-200 disabled:shadow-none"
+            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50"
           >
             {isSaving ? (
-              <Loader2 size={16} className="animate-spin" />
+              <>
+                <Loader2 size={15} className="animate-spin" />
+                <span>Updating Ledger...</span>
+              </>
             ) : (
-              <Save size={16} />
+              <>
+                <Save size={15} />
+                <span>Confirm & Post Payment</span>
+              </>
             )}
-            {isSaving ? "Updating Ledger..." : "Confirm & Post Payment"}
           </button>
         </form>
       </motion.div>
