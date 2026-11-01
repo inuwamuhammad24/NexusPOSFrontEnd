@@ -135,11 +135,20 @@ export default function App() {
         draft.flashMessage.isFlashMessageOpen = false
         break
 
+      case "removeFlashMessage":
+        draft.flashMessage.msgs = draft.flashMessage.msgs.filter(
+          item => item.id !== action.id,
+        )
+        if (draft.flashMessage.msgs.length === 0) {
+          draft.flashMessage.isFlashMessageOpen = false
+        }
+        break
+
       case "addFlashMessage":
         draft.flashMessage.msgs.push({
           type: action.payload.type || "info",
           msg: action.payload.msg,
-          id: new Date().getTime(),
+          id: new Date().getTime() + Math.random(),
         })
         draft.flashMessage.isFlashMessageOpen = true
         break
