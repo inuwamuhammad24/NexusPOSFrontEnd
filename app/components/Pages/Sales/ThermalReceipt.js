@@ -21,7 +21,7 @@ export default function ReceiptContainer({ receiptId }) {
   const [isFetching, setIsFetching] = useState(false)
   const [layoutType, setLayoutType] = useState("thermal")
 
-  // --- HARDWARE STACK PRINT IFRAME ENGINE (WITH NATIVE STYLING INJECTION) ---
+  // --- HARDWARE STACK PRINT IFRAME ENGINE ---
   const handlePrint = () => {
     const printableContent = document.getElementById(
       "nexus-printable-area",
@@ -38,8 +38,6 @@ export default function ReceiptContainer({ receiptId }) {
     document.body.appendChild(iframe)
 
     const doc = iframe.contentWindow.document
-
-    // Thermal roll (58mm/80mm) vs Standard A4 layout rules
     const isThermal = layoutType === "thermal"
 
     doc.open()
@@ -48,9 +46,10 @@ export default function ReceiptContainer({ receiptId }) {
       <html>
         <head>
           <meta charset="utf-8" />
-          <title>Receipt - ${localSaleData?.invoiceId || "POS"}</title>
+          <title>Receipt - ${
+            localSaleData?.invoiceId || localSaleData?.receiptNumber || "POS"
+          }</title>
           <style>
-            /* 1. Global Reset & Print Margins */
             * {
               box-sizing: border-box;
               margin: 0;
@@ -58,12 +57,10 @@ export default function ReceiptContainer({ receiptId }) {
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
-
             @page {
               size: ${isThermal ? "80mm auto" : "A4 portrait"};
               margin: ${isThermal ? "0mm" : "12mm"};
             }
-
             body {
               font-family: ${
                 isThermal
@@ -78,8 +75,6 @@ export default function ReceiptContainer({ receiptId }) {
               font-size: ${isThermal ? "11px" : "13px"};
               line-height: ${isThermal ? "1.3" : "1.4"};
             }
-
-            /* 2. Emulated Tailwind Layout Engine for Print */
             .flex { display: flex !important; }
             .flex-col { flex-direction: column !important; }
             .items-center { align-items: center !important; }
@@ -89,14 +84,11 @@ export default function ReceiptContainer({ receiptId }) {
             .text-center { text-align: center !important; }
             .text-right { text-align: right !important; }
             .text-left { text-align: left !important; }
-
             .font-bold { font-weight: 700 !important; }
             .font-semibold { font-weight: 600 !important; }
             .font-black { font-weight: 900 !important; }
             .uppercase { text-transform: uppercase !important; }
             .italic { font-style: italic !important; }
-
-            /* Font Sizes */
             .text-\\[10px\\] { font-size: 9.5px !important; }
             .text-\\[11px\\] { font-size: 10.5px !important; }
             .text-xs { font-size: 11px !important; }
@@ -104,8 +96,6 @@ export default function ReceiptContainer({ receiptId }) {
             .text-base { font-size: 14px !important; }
             .text-xl { font-size: 18px !important; }
             .text-2xl { font-size: 22px !important; }
-
-            /* Spacing */
             .mt-0\\.5 { margin-top: 2px !important; }
             .mt-1 { margin-top: 4px !important; }
             .mt-2 { margin-top: 6px !important; }
@@ -117,7 +107,6 @@ export default function ReceiptContainer({ receiptId }) {
             .mb-3 { margin-bottom: 8px !important; }
             .mb-4 { margin-bottom: 12px !important; }
             .mb-6 { margin-bottom: 16px !important; }
-            
             .py-1 { padding-top: 2px !important; padding-bottom: 2px !important; }
             .py-2 { padding-top: 6px !important; padding-bottom: 6px !important; }
             .py-2\\.5 { padding-top: 7px !important; padding-bottom: 7px !important; }
@@ -129,35 +118,25 @@ export default function ReceiptContainer({ receiptId }) {
             .pt-4 { padding-top: 12px !important; }
             .pb-1 { padding-bottom: 4px !important; }
             .pb-6 { padding-bottom: 16px !important; }
-
             .space-y-0\\.5 > * + * { margin-top: 2px !important; }
             .space-y-1 > * + * { margin-top: 3px !important; }
             .space-y-2 > * + * { margin-top: 6px !important; }
             .space-y-3 > * + * { margin-top: 8px !important; }
-
             .w-full { width: 100% !important; }
             .w-16 { width: 45px !important; }
             .w-64 { width: 240px !important; }
-
-            /* Borders */
             .border-t { border-top: 1px dashed #000 !important; }
             .border-b { border-bottom: 1px dashed #000 !important; }
             .border-dashed { border-style: dashed !important; }
             .border-gray-200, .border-gray-300 { border-color: #555 !important; }
             .border-collapse { border-collapse: collapse !important; }
-
-            /* Table Formatting */
             table { width: 100% !important; border-collapse: collapse !important; }
             th, td { vertical-align: top !important; }
-
-            /* QR & Image Scaling */
             svg { display: block !important; margin: 0 auto !important; }
           </style>
         </head>
         <body>
-          <div>
-            ${printableContent}
-          </div>
+          <div>${printableContent}</div>
           <script>
             window.addEventListener('load', function() {
               setTimeout(function() {
@@ -180,31 +159,33 @@ export default function ReceiptContainer({ receiptId }) {
   }, [initialData])
 
   useEffect(() => {
-    async function fetchReceiptAndConfig() {
+    async function fetchReceiptIfMissing() {
       const token = appState.user?.token || localStorage.getItem("token")
       const targetId =
         receiptId || appState.tempReceiptId || appState.activeReceiptId
 
-      if (!targetId && localSaleData?.items?.length) return
+      // Skip remote fetch if we already have valid receipt data with items
+      if (
+        initialData &&
+        Array.isArray(initialData.items) &&
+        initialData.items.length > 0
+      ) {
+        return
+      }
+      if (!targetId) return
 
       setIsFetching(true)
       try {
-        const [receiptRes, configRes] = await Promise.all([
-          targetId
-            ? Axios.post(`${appState.backendURL}/get-receipt-data`, {
-                token,
-                id: targetId,
-              })
-            : Promise.resolve({ data: initialData }),
-          Axios.post(`${appState.backendURL}/get-company-config`, {
+        const receiptRes = await Axios.post(
+          `${appState.backendURL}/get-receipt-data`,
+          {
             token,
-          }).catch(() => ({
-            data: null,
-          })),
-        ])
-
-        if (receiptRes?.data) setLocalSaleData(receiptRes.data)
-        if (configRes?.data) setCompanyConfig(configRes.data)
+            id: targetId,
+          },
+        )
+        if (receiptRes?.data) {
+          setLocalSaleData(receiptRes.data)
+        }
       } catch (error) {
         console.error("Error retrieving invoice details:", error)
       } finally {
@@ -212,9 +193,10 @@ export default function ReceiptContainer({ receiptId }) {
       }
     }
 
-    fetchReceiptAndConfig()
+    fetchReceiptIfMissing()
   }, [
     receiptId,
+    initialData,
     appState.tempReceiptId,
     appState.activeReceiptId,
     appState.backendURL,
@@ -238,7 +220,9 @@ export default function ReceiptContainer({ receiptId }) {
     [companyConfig, appState.user],
   )
 
-  if (isFetching || !localSaleData) {
+  if (!isFetching && !localSaleData) return null
+
+  if (isFetching) {
     return (
       <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
         <div className="bg-white w-full max-w-xs rounded-2xl shadow-xl p-8 flex flex-col items-center">
@@ -251,7 +235,17 @@ export default function ReceiptContainer({ receiptId }) {
     )
   }
 
-  const grandTotal = parseFloat(localSaleData.total || 0)
+  const displayInvoiceId =
+    localSaleData.invoiceId ||
+    localSaleData.receiptNumber ||
+    localSaleData.invoiceNumber ||
+    `INV-${String(localSaleData._id || Date.now())
+      .slice(-6)
+      .toUpperCase()}`
+
+  const grandTotal = parseFloat(
+    localSaleData.total ?? localSaleData.totalAmount ?? 0,
+  )
   const amountPaid = parseFloat(
     localSaleData.amountPaid ??
       localSaleData.paid ??
@@ -260,6 +254,7 @@ export default function ReceiptContainer({ receiptId }) {
   )
   const balanceOwed = parseFloat(
     localSaleData.balanceToCredit ??
+      localSaleData.balanceDue ??
       localSaleData.balanceOwed ??
       Math.max(0, grandTotal - amountPaid),
   )
@@ -273,19 +268,23 @@ export default function ReceiptContainer({ receiptId }) {
     "Cash"
 
   return (
-    <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+    <div
+      onClick={() => appDispatch({ type: "closeReceipt" })}
+      className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto"
+    >
       <div
-        className={`bg-white w-full transition-all rounded-2xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[92vh] border border-gray-200 ${
+        onClick={e => e.stopPropagation()}
+        className={`bg-white w-full transition-all rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[92vh] border border-gray-200 ${
           layoutType === "standard" ? "max-w-3xl" : "max-w-sm"
         }`}
       >
         {/* --- DYNAMIC ACTION HEADER --- */}
-        <div className="px-5 py-3 border-b border-gray-100 flex justify-between items-center bg-slate-50 select-none shrink-0">
+        <div className="px-4 sm:px-5 py-3 border-b border-gray-100 flex justify-between items-center gap-2 bg-slate-50 select-none shrink-0">
           <div className="flex bg-gray-200/70 p-1 rounded-xl gap-1">
             <button
               type="button"
               onClick={() => setLayoutType("thermal")}
-              className={`flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${
+              className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
                 layoutType === "thermal"
                   ? "bg-white text-indigo-600 shadow-sm"
                   : "text-gray-500 hover:text-gray-800"
@@ -296,30 +295,30 @@ export default function ReceiptContainer({ receiptId }) {
             <button
               type="button"
               onClick={() => setLayoutType("standard")}
-              className={`flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${
+              className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
                 layoutType === "standard"
                   ? "bg-white text-indigo-600 shadow-sm"
                   : "text-gray-500 hover:text-gray-800"
               }`}
             >
-              <FileText size={13} /> Standard A4
+              <FileText size={13} /> A4 Invoice
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition shadow-sm text-xs font-bold"
+              className="flex items-center gap-1 px-3 py-1.5 text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition shadow-sm text-xs font-bold active:scale-95"
               title="Print Receipt"
             >
-              <Printer size={15} />
+              <Printer size={14} />
               <span>Print</span>
             </button>
             <button
               type="button"
               onClick={() => appDispatch({ type: "closeReceipt" })}
-              className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition"
+              className="p-2 text-gray-500 hover:text-gray-800 bg-gray-200/60 hover:bg-gray-200 rounded-xl transition active:scale-95"
               title="Close"
             >
               <X size={16} />
@@ -330,11 +329,9 @@ export default function ReceiptContainer({ receiptId }) {
         {/* --- PRINTABLE CANVAS WRAPPER --- */}
         <div
           id="nexus-printable-area"
-          className="flex-1 overflow-y-auto p-6 scrollbar-thin bg-white"
+          className="flex-1 overflow-y-auto p-5 sm:p-6 scrollbar-thin bg-white"
         >
-          {/* ======================================================= */}
-          {/* OPTION A: THERMAL 58MM / 80MM RECEIPT VIEW             */}
-          {/* ======================================================= */}
+          {/* OPTION A: THERMAL 58MM / 80MM RECEIPT VIEW */}
           {layoutType === "thermal" && (
             <div className="w-full mx-auto flex flex-col items-center text-gray-900 font-mono text-xs">
               <div className="text-center mb-4">
@@ -352,7 +349,7 @@ export default function ReceiptContainer({ receiptId }) {
               <div className="w-full border-t border-b border-dashed border-gray-300 py-2 mb-3 space-y-1 text-[11px]">
                 <div className="flex justify-between">
                   <span>INVOICE:</span>
-                  <span className="font-bold">{localSaleData.invoiceId}</span>
+                  <span className="font-bold">{displayInvoiceId}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>CUSTOMER:</span>
@@ -364,6 +361,7 @@ export default function ReceiptContainer({ receiptId }) {
                   <span>STAFF:</span>
                   <span className="font-bold uppercase">
                     {localSaleData.staffName ||
+                      localSaleData.cashierName ||
                       appState.user?.username ||
                       "Staff"}
                   </span>
@@ -394,14 +392,16 @@ export default function ReceiptContainer({ receiptId }) {
                   const lineSubtotal = parseFloat(
                     item.subtotal ?? rate * quantity,
                   )
+                  const itemLabel =
+                    item.name || item.productName || "Product Item"
 
                   return (
                     <div key={idx} className="space-y-0.5">
-                      <div className="flex justify-between font-bold">
-                        <span className="uppercase truncate max-w-[170px]">
-                          {item.name || "Product Item"}
+                      <div className="flex justify-between font-bold gap-2">
+                        <span className="uppercase">{itemLabel}</span>
+                        <span className="shrink-0">
+                          {formatNaira(lineSubtotal)}
                         </span>
-                        <span>{formatNaira(lineSubtotal)}</span>
                       </div>
                       <div className="text-[10px] text-gray-500">
                         {quantity} x {formatNaira(rate)}
@@ -445,7 +445,7 @@ export default function ReceiptContainer({ receiptId }) {
                   {company.footer}
                 </p>
                 <QRCodeSVG
-                  value={`INV:${localSaleData.invoiceId}|AMT:${grandTotal}`}
+                  value={`INV:${displayInvoiceId}|AMT:${grandTotal}`}
                   size={65}
                   level="M"
                 />
@@ -453,12 +453,10 @@ export default function ReceiptContainer({ receiptId }) {
             </div>
           )}
 
-          {/* ======================================================= */}
-          {/* OPTION B: STANDARD INVOICE VIEW                         */}
-          {/* ======================================================= */}
+          {/* OPTION B: STANDARD A4 INVOICE VIEW */}
           {layoutType === "standard" && (
-            <div className="p-4 text-gray-900 font-sans text-xs">
-              <div className="flex justify-between items-start border-b border-gray-200 pb-6 mb-6">
+            <div className="p-2 sm:p-4 text-gray-900 font-sans text-xs">
+              <div className="flex flex-col sm:flex-row justify-between items-start gap-4 border-b border-gray-200 pb-6 mb-6">
                 <div>
                   <h1 className="text-xl font-bold uppercase tracking-tight">
                     {company.name}
@@ -472,12 +470,12 @@ export default function ReceiptContainer({ receiptId }) {
                   <p className="text-gray-500 text-xs">TIN: {company.tin}</p>
                 </div>
 
-                <div className="text-right space-y-1">
-                  <h2 className="text-2xl font-black text-gray-400 uppercase tracking-tight">
+                <div className="sm:text-right space-y-1">
+                  <h2 className="text-xl sm:text-2xl font-black text-gray-400 uppercase tracking-tight">
                     Sales Invoice
                   </h2>
                   <p className="text-gray-800 font-mono font-bold">
-                    {localSaleData.invoiceId}
+                    {displayInvoiceId}
                   </p>
                   <p className="text-gray-500">
                     Date:{" "}
@@ -495,50 +493,59 @@ export default function ReceiptContainer({ receiptId }) {
               </div>
 
               {/* Line Items Table */}
-              <table className="w-full border-collapse mb-6">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50 text-[10px] font-bold uppercase text-gray-500">
-                    <th className="py-2.5 px-3 text-center w-16">Qty</th>
-                    <th className="py-2.5 px-3 text-left">Item Description</th>
-                    <th className="py-2.5 px-3 text-right">Unit Rate</th>
-                    <th className="py-2.5 px-3 text-right">Subtotal</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {localSaleData.items?.map((item, idx) => {
-                    const quantity = parseFloat(
-                      item.quantity ?? item.qty ?? item.unitsSold ?? 1,
-                    )
-                    const rate = parseFloat(
-                      item.priceAtSale ?? item.price ?? item.sellingPrice ?? 0,
-                    )
-                    const lineSubtotal = parseFloat(
-                      item.subtotal ?? rate * quantity,
-                    )
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse mb-6">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50 text-[10px] font-bold uppercase text-gray-500">
+                      <th className="py-2.5 px-3 text-center w-14">Qty</th>
+                      <th className="py-2.5 px-3 text-left">
+                        Item Description
+                      </th>
+                      <th className="py-2.5 px-3 text-right">Unit Rate</th>
+                      <th className="py-2.5 px-3 text-right">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {localSaleData.items?.map((item, idx) => {
+                      const quantity = parseFloat(
+                        item.quantity ?? item.qty ?? item.unitsSold ?? 1,
+                      )
+                      const rate = parseFloat(
+                        item.priceAtSale ??
+                          item.price ??
+                          item.sellingPrice ??
+                          0,
+                      )
+                      const lineSubtotal = parseFloat(
+                        item.subtotal ?? rate * quantity,
+                      )
+                      const itemLabel =
+                        item.name || item.productName || "Product Item"
 
-                    return (
-                      <tr key={idx}>
-                        <td className="py-2.5 px-3 text-center font-bold text-gray-800">
-                          {quantity}
-                        </td>
-                        <td className="py-2.5 px-3 font-medium text-gray-900 uppercase">
-                          {item.name || "Product Item"}
-                        </td>
-                        <td className="py-2.5 px-3 text-right">
-                          {formatNaira(rate)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-bold text-gray-900">
-                          {formatNaira(lineSubtotal)}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                      return (
+                        <tr key={idx}>
+                          <td className="py-2.5 px-3 text-center font-bold text-gray-800">
+                            {quantity}
+                          </td>
+                          <td className="py-2.5 px-3 font-medium text-gray-900 uppercase">
+                            {itemLabel}
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            {formatNaira(rate)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-bold text-gray-900">
+                            {formatNaira(lineSubtotal)}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
               {/* Summary Balances */}
               <div className="flex justify-end pt-2">
-                <div className="w-64 space-y-2 border-t border-gray-200 pt-3">
+                <div className="w-full sm:w-64 space-y-2 border-t border-gray-200 pt-3">
                   <div className="flex justify-between text-gray-600">
                     <span>Taxable Subtotal:</span>
                     <span>{formatNaira(rawSubtotal)}</span>
