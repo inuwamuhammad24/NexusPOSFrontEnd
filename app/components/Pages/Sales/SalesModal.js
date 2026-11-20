@@ -305,7 +305,7 @@ export default function CompactSalesModal({ onSaleComplete }) {
       return
     }
 
-    setIsSaving(true)
+    setSaving(true)
     try {
       const saleData = {
         token: appState.user?.token,
@@ -397,7 +397,7 @@ export default function CompactSalesModal({ onSaleComplete }) {
         },
       })
     } finally {
-      setIsSaving(false)
+      setSaving(false)
     }
   }
 
